@@ -1,3 +1,3 @@
-from src.example.multi_client import run_example
+from src.example.distributed_nodes import run_example
 
 run_example()
