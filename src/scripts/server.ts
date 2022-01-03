@@ -1,8 +1,7 @@
-import { Server } from "../server/server";
+import { startHttpServer } from "../server/server";
 
 const main = async () => {
-  const server = new Server();
-  server.start();
+  startHttpServer(3000);
 };
 
 main().catch(console.error);
