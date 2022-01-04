@@ -23,7 +23,9 @@ const findToken = async (
   difficulty: number,
   slowdown = false
 ): Promise<string> => {
-  for (let nonce = 0; ; nonce++) {
+  const start = Math.floor(Math.random() * 10000);
+
+  for (let nonce = start; ; nonce++) {
     if (verifyToken(content, `${nonce}`, difficulty)) {
       return `${nonce}`;
     }

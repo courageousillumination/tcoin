@@ -1,6 +1,7 @@
 import express from "express";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
+import cors from "cors";
 import {
   Block,
   hashBlock,
@@ -32,7 +33,10 @@ class Server {
   /** Entries that we have not yet committed. */
   private pendingEntries: LedgerEntry[] = [];
 
-  constructor(private readonly peers: string[] = []) {}
+  constructor(
+    private readonly id: number,
+    private readonly peers: string[] = []
+  ) {}
 
   /** Writes a new entry to the ledger. */
   public async writeEntry(content: string): Promise<string> {
@@ -71,25 +75,31 @@ class Server {
     const newBlock: TCoinBlock = {
       id: headBlock.id + 1,
       nonce,
-      content: this.pendingEntries.slice(),
+      content: [
+        { id: "-1", content: `Mined by ${this.id}` },
+        ...this.pendingEntries.slice(),
+      ],
     };
-    console.log(
-      `Mined new block in ${(Date.now() - start) / 1000} seconds (${
-        this.pendingEntries.length
-      } transactions)`
-    );
-
-    this.ledger.push(newBlock);
-    this.pendingEntries = [];
+    if (await this.addBlock(newBlock)) {
+      console.log(
+        `Mined new block in ${(Date.now() - start) / 1000} seconds (${
+          this.pendingEntries.length
+        } transactions)`
+      );
+      this.pendingEntries = [];
+    } else {
+      console.log("Block invalidated.");
+    }
   }
 
   /** Adds a new block to the block chain (including all contents data). */
   public async addBlock(block: TCoinBlock) {
     const headBlock = this.ledger[this.ledger.length - 1];
     if (await isValidNextBlock(block, headBlock)) {
-      console.log("Adding external block.");
       this.ledger.push(block);
+      return true;
     }
+    return false;
   }
 
   /** Gets an entry or the sentienl string "Not Found" */
@@ -110,6 +120,10 @@ class Server {
     return "Not Found";
   }
 
+  public getLedger() {
+    return this.ledger;
+  }
+
   /** Print the ledger to the console. */
   public printLedger() {
     console.log("Uncommitted entries");
@@ -128,10 +142,11 @@ class Server {
 
 /** Start the server and run forever. */
 const startHttpServer = (port: number, peers: string[]) => {
-  const server = new Server(peers);
+  const server = new Server(port, peers);
 
   const app = express();
   app.use(bodyParser.json());
+  app.use(cors());
 
   // Write a new entry via POST.
   app.post("/entry", async (req, res) => {
@@ -155,6 +170,11 @@ const startHttpServer = (port: number, peers: string[]) => {
     res.send();
   });
 
+  // Get the entire block chain.
+  app.get("/block", async (req, res) => {
+    res.send(server.getLedger());
+  });
+
   // TODO: Make these debug endpoints POSTS
   // Debug endpoint for printing.
   app.get("/debug/print", async (_, res) => {
@@ -170,7 +190,7 @@ const startHttpServer = (port: number, peers: string[]) => {
   });
 
   // Start serving the app.
-  // server.startMining(); // DON'T await this, it never returns.
+  server.startMining(); // DON'T await this, it never returns.
   app.listen(port, () => console.log(`Started server on port ${port}`));
 };
 
