@@ -15,14 +15,20 @@ const countZeros = (hash: string): number => {
  *
  * Specifically, this will find a string that when concatenated with content
  * produces a hash that has at least `difficulty` leading zeros.
+ *
+ * Optionally takes in a slow down parameter so we don't completely pin the CPU...
  */
 const findToken = async (
   content: string,
-  difficulty: number
+  difficulty: number,
+  slowdown = false
 ): Promise<string> => {
   for (let nonce = 0; ; nonce++) {
     if (verifyToken(content, `${nonce}`, difficulty)) {
       return `${nonce}`;
+    }
+    if (slowdown) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
     }
   }
 };
@@ -33,15 +39,12 @@ const verifyToken = (
   nonce: string,
   difficulty: number
 ): boolean => {
-  return countZeros(getHash(content, nonce)) >= difficulty;
+  return countZeros(getHash(content + nonce)) >= difficulty;
 };
 
 /** Gets the hash for a content + nonce. */
-const getHash = (content: string, nonce: string): string => {
-  return crypto
-    .createHash("sha256")
-    .update(content + nonce)
-    .digest("hex");
+const getHash = (content: string): string => {
+  return crypto.createHash("sha256").update(content).digest("hex");
 };
 
 export { findToken, verifyToken, getHash };

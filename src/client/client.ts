@@ -17,7 +17,10 @@ class Client {
       return Promise.reject("Not connected.");
     }
     const result = await fetch(`http://localhost:${this.port}/entry`, {
-      body: entry,
+      body: JSON.stringify({ content: entry }),
+      headers: {
+        "Content-Type": "application/json",
+      },
       method: "POST",
     });
     return result.text();

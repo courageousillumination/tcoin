@@ -1,6 +1,12 @@
 import express from "express";
 import bodyParser from "body-parser";
-import { Block, hashBlock, workOnBlock } from "../common/block";
+import fetch from "node-fetch";
+import {
+  Block,
+  hashBlock,
+  isValidNextBlock,
+  workOnBlock,
+} from "../common/block";
 
 interface LedgerEntry {
   id: string;
@@ -9,9 +15,11 @@ interface LedgerEntry {
 
 type TCoinBlock = Block<LedgerEntry[]>;
 
+// Allows the miner to slow down when mining.
+const DEBUG_MINER = true;
+
 const GENSIS_BLOCK: TCoinBlock = {
-  id: "0",
-  previousHash: "",
+  id: 0,
   nonce: "",
   content: [],
 };
@@ -24,6 +32,8 @@ class Server {
   /** Entries that we have not yet committed. */
   private pendingEntries: LedgerEntry[] = [];
 
+  constructor(private readonly peers: string[] = []) {}
+
   /** Writes a new entry to the ledger. */
   public async writeEntry(content: string): Promise<string> {
     const id = `${this.nextId}`;
@@ -32,19 +42,54 @@ class Server {
     return id;
   }
 
+  /**
+   * Start the mining process.
+   *
+   * A mining server will continually look for new hashes to commit.
+   */
+  public async startMining() {
+    while (true) {
+      await this.mineBlock();
+      // Publish to peers
+      for (const peer of this.peers) {
+        await fetch(`${peer}/block`, {
+          body: JSON.stringify({ block: this.ledger[this.ledger.length - 1] }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+        });
+      }
+    }
+  }
+
   /** Do work to commit the current block. */
-  public async commitBlock() {
-    const nonce = await workOnBlock(this.ledger[0]);
-    const previousHash = await hashBlock(this.ledger[0]);
+  public async mineBlock() {
+    const headBlock = this.ledger[this.ledger.length - 1];
+    const start = Date.now();
+    const nonce = await workOnBlock(headBlock, DEBUG_MINER);
     const newBlock: TCoinBlock = {
-      id: "N/A",
+      id: headBlock.id + 1,
       nonce,
-      previousHash,
       content: this.pendingEntries.slice(),
     };
-    this.ledger.unshift(newBlock);
+    console.log(
+      `Mined new block in ${(Date.now() - start) / 1000} seconds (${
+        this.pendingEntries.length
+      } transactions)`
+    );
+
+    this.ledger.push(newBlock);
     this.pendingEntries = [];
-    console.log("Commited new block");
+  }
+
+  /** Adds a new block to the block chain (including all contents data). */
+  public async addBlock(block: TCoinBlock) {
+    const headBlock = this.ledger[this.ledger.length - 1];
+    if (await isValidNextBlock(block, headBlock)) {
+      console.log("Adding external block.");
+      this.ledger.push(block);
+    }
   }
 
   /** Gets an entry or the sentienl string "Not Found" */
@@ -73,7 +118,7 @@ class Server {
     }
 
     for (const block of this.ledger) {
-      console.log(`BLOCK ${block.id} ${block.previousHash} ${block.nonce}`);
+      console.log(`BLOCK ${block.id} (nonce=${block.nonce})`);
       for (const entry of block.content) {
         console.log(entry.id, entry.content);
       }
@@ -82,16 +127,17 @@ class Server {
 }
 
 /** Start the server and run forever. */
-const startHttpServer = (port: number) => {
-  const server = new Server();
+const startHttpServer = (port: number, peers: string[]) => {
+  const server = new Server(peers);
 
   const app = express();
-  app.use(bodyParser.text());
+  app.use(bodyParser.json());
 
   // Write a new entry via POST.
   app.post("/entry", async (req, res) => {
-    const id = await server.writeEntry(req.body);
-    console.log(`Wrote new entry, id=${id}, content=${req.body}`);
+    const content = req.body.content;
+    const id = await server.writeEntry(content);
+    console.log(`Wrote new entry, id=${id}, content=${content}`);
     res.send(id);
   });
 
@@ -99,6 +145,14 @@ const startHttpServer = (port: number) => {
   app.get("/entry/:id", async (req, res) => {
     const content = await server.getEntry(req.params.id);
     res.send(content);
+  });
+
+  // Add a block from an external miner.
+  app.post("/block", async (req, res) => {
+    const block = req.body.block;
+    await server.addBlock(block);
+    res.status(201);
+    res.send();
   });
 
   // TODO: Make these debug endpoints POSTS
@@ -109,14 +163,14 @@ const startHttpServer = (port: number) => {
     res.send();
   });
 
-  // Force the server to commit the current block.
-  app.get("/debug/commit", async (_, res) => {
-    await server.commitBlock();
+  app.get("/debug/start", async (_, res) => {
+    server.startMining();
     res.status(201);
     res.send();
   });
 
   // Start serving the app.
+  // server.startMining(); // DON'T await this, it never returns.
   app.listen(port, () => console.log(`Started server on port ${port}`));
 };
 
