@@ -1,39 +1,55 @@
 import fetch from "node-fetch";
+import { Entry } from "../common/entry";
+
+type Server = string;
 
 /**
- * A simple client for interacting with TCoin.
+ * Make a post request to the server and parse the result.
+ * @param server
+ * @param endpoint
+ * @param body
+ * @returns
  */
-class Client {
-  private port: number | null = null;
-
-  /** Connect the client to a specific server. */
-  public async connect(port: number = 3000) {
-    this.port = port;
+const makeRequest = async (
+  server: Server,
+  endpoint: string,
+  method: string = "GET",
+  body?: unknown
+) => {
+  const result = await fetch(`${server}${endpoint}`, {
+    body: body ? JSON.stringify(body) : undefined,
+    headers: { "Content-Type": "application/json" },
+    method,
+  });
+  if (result.status == 201) {
+    return null;
+  } else {
+    return result.json();
   }
+};
 
-  /** Write an entry to the ledger. */
-  public async writeEntry(entry: string): Promise<string> {
-    if (this.port === null) {
-      return Promise.reject("Not connected.");
-    }
-    const result = await fetch(`http://localhost:${this.port}/entry`, {
-      body: JSON.stringify({ content: entry }),
-      headers: {
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-    });
-    return result.text();
-  }
+/**
+ * Write a new entry to the server.
+ * @param server
+ * @param content
+ * @returns
+ */
+const writePendingEntry = async (server: Server, entry: Entry) => {
+  return makeRequest(server, "/entries", "POST", entry);
+};
 
-  /** Reads an entry from the ledger. */
-  public async getEntry(id: string): Promise<string> {
-    if (this.port === null) {
-      return Promise.reject("Not connected.");
-    }
-    const result = await fetch(`http://localhost:${this.port}/entry/${id}`);
-    return result.text();
-  }
-}
+/**
+ * Get all pending entries
+ */
+const getPendingEntries = async (server: Server) => {
+  return makeRequest(server, "/entries");
+};
 
-export { Client };
+/**
+ * Connect a peer.
+ */
+const connectPeer = async (server: Server, peer: { peer: Server }) => {
+  return makeRequest(server, "/peers", "POST", peer);
+};
+
+export { writePendingEntry, getPendingEntries, connectPeer };

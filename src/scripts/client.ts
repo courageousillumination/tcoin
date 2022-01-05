@@ -1,21 +1,18 @@
 import arg from "arg";
-import { Client } from "../client/client";
+import { connectPeer, writePendingEntry } from "../client/client";
 
 const main = async () => {
   const args = arg({
     "--write": String,
-    "--read": String,
+    "--peer": String,
   });
 
-  const client = new Client();
-  await client.connect();
-
   if (args["--write"]) {
-    const newId = await client.writeEntry(args["--write"]);
-    console.log(`Wrote new entry, id=${newId}`);
-  } else if (args["--read"]) {
-    const content = await client.getEntry(args["--read"]);
-    console.log(content);
+    await writePendingEntry("http://localhost:3000", {
+      content: args["--write"],
+    });
+  } else if (args["--peer"]) {
+    await connectPeer("http://localhost:3000", { peer: args["--peer"] });
   } else {
     console.log("Incorrect usage.");
   }

@@ -1,196 +1,156 @@
-import express from "express";
+import express, { IRouter, Response } from "express";
 import bodyParser from "body-parser";
-import fetch from "node-fetch";
 import cors from "cors";
-import {
-  Block,
-  hashBlock,
-  isValidNextBlock,
-  workOnBlock,
-} from "../common/block";
+import { Block } from "../common/block";
+import { Entry } from "../common/entry";
+import { Stat } from "../common/stat";
+import { connectPeer, writePendingEntry } from "../client/client";
 
-interface LedgerEntry {
-  id: string;
-  content: string;
-}
-
-type TCoinBlock = Block<LedgerEntry[]>;
-
-// Allows the miner to slow down when mining.
-const DEBUG_MINER = true;
-
-const GENSIS_BLOCK: TCoinBlock = {
-  id: 0,
-  nonce: "",
-  content: [],
-};
-
-/** A server for the TCoin protocol. */
+/**
+ * A fully compliant TCoin server.
+ */
 class Server {
-  private nextId = 0;
-  private readonly ledger: TCoinBlock[] = [GENSIS_BLOCK];
+  /** Known peers. */
+  private readonly peers: string[] = [];
 
-  /** Entries that we have not yet committed. */
-  private pendingEntries: LedgerEntry[] = [];
+  /** Entries that have been validated, but not committed. */
+  private mempool: Entry[] = [];
 
-  constructor(
-    private readonly id: number,
-    private readonly peers: string[] = []
-  ) {}
+  constructor(private readonly location: string) {}
 
-  /** Writes a new entry to the ledger. */
-  public async writeEntry(content: string): Promise<string> {
-    const id = `${this.nextId}`;
-    this.pendingEntries.push({ id, content });
-    this.nextId += 1;
-    return id;
+  /**
+   * Adds a new entry, in the pending state.
+   *
+   * A new entry will be broadcast to all peers. A server will deduplicate entries
+   * based on the content of that entry.
+   */
+  public async addPendingEntry(entry: Entry) {
+    const found = this.mempool.find((x) => x.content === entry.content);
+    if (!found) {
+      this.mempool.push(entry);
+      this.mapPeers((peer) => writePendingEntry(peer, entry));
+    }
   }
 
   /**
-   * Start the mining process.
-   *
-   * A mining server will continually look for new hashes to commit.
+   * Returns all items in the mempool (pending entries).
+   * @returns
    */
-  public async startMining() {
-    while (true) {
-      await this.mineBlock();
-      // Publish to peers
-      for (const peer of this.peers) {
-        await fetch(`${peer}/block`, {
-          body: JSON.stringify({ block: this.ledger[this.ledger.length - 1] }),
-          headers: {
-            "Content-Type": "application/json",
-          },
-          method: "POST",
-        });
-      }
+  public async getPendingEntries(): Promise<Entry[]> {
+    return this.mempool;
+  }
+
+  /**
+   * Commits a block to the block chain.
+   *
+   * This will first validate the block as part of this chain, and, if valid
+   * add it to the current chain. If the commit is sucessful it will be broadcast to all
+   * peers, and all pending entries will be removed from the mempool.
+   * @param block
+   */
+  public async commitBlock(block: Block) {}
+
+  /**
+   * Returns all blocks sinces id.
+   *
+   * If id is omitted, all blocks will be returned.
+   * @param id
+   */
+  public async getBlocks(id?: string): Promise<Block[]> {
+    return [];
+  }
+
+  /**
+   * Registers a new peer with the server.
+   *
+   * This peer will recieve all broadcast updates going forward. Additionally, this server
+   * will register itself as a peer.
+   * @param peer
+   */
+  public async addPeer({ peer }: { peer: string }) {
+    if (!this.peers.includes(peer)) {
+      this.peers.push(peer);
+      connectPeer(peer, { peer: this.location });
     }
   }
 
-  /** Do work to commit the current block. */
-  public async mineBlock() {
-    const headBlock = this.ledger[this.ledger.length - 1];
-    const start = Date.now();
-    const nonce = await workOnBlock(headBlock, DEBUG_MINER);
-    const newBlock: TCoinBlock = {
-      id: headBlock.id + 1,
-      nonce,
-      content: [
-        { id: "-1", content: `Mined by ${this.id}` },
-        ...this.pendingEntries.slice(),
-      ],
-    };
-    if (await this.addBlock(newBlock)) {
-      console.log(
-        `Mined new block in ${(Date.now() - start) / 1000} seconds (${
-          this.pendingEntries.length
-        } transactions)`
-      );
-      this.pendingEntries = [];
-    } else {
-      console.log("Block invalidated.");
-    }
+  /**
+   * Returns a list of all known active peers.
+   * @returns
+   */
+  public async getPeers(): Promise<string[]> {
+    return this.peers;
   }
 
-  /** Adds a new block to the block chain (including all contents data). */
-  public async addBlock(block: TCoinBlock) {
-    const headBlock = this.ledger[this.ledger.length - 1];
-    if (await isValidNextBlock(block, headBlock)) {
-      this.ledger.push(block);
-      return true;
-    }
-    return false;
+  /**
+   * Gets active stats about the server.
+   * @returns
+   */
+  public async getStats(): Promise<Stat[]> {
+    return [
+      { name: "mempool-size", value: this.mempool.length },
+      { name: "peers", value: this.peers.length },
+    ];
   }
 
-  /** Gets an entry or the sentienl string "Not Found" */
-  public async getEntry(id: string): Promise<string> {
-    for (const block of this.ledger) {
-      for (const entry of block.content) {
-        if (entry.id === id) {
-          return entry.content;
-        }
-      }
-    }
-
-    for (const entry of this.pendingEntries) {
-      if (entry.id === id) {
-        return entry.content + " (unconfirmed)";
-      }
-    }
-    return "Not Found";
-  }
-
-  public getLedger() {
-    return this.ledger;
-  }
-
-  /** Print the ledger to the console. */
-  public printLedger() {
-    console.log("Uncommitted entries");
-    for (const entry of this.pendingEntries) {
-      console.log(entry.id, entry.content);
-    }
-
-    for (const block of this.ledger) {
-      console.log(`BLOCK ${block.id} (nonce=${block.nonce})`);
-      for (const entry of block.content) {
-        console.log(entry.id, entry.content);
+  /**
+   * Map a function over all peers.
+   * @param func
+   */
+  private async mapPeers(func: (peer: string) => Promise<unknown>) {
+    for (const peer of this.peers) {
+      try {
+        await func(peer);
+      } catch (e) {
+        console.warn("Issue with a peer", e);
       }
     }
   }
 }
 
+/**
+ * Send data if it exists, otherwise set the response code to 201 and send nothing.
+ */
+const sendSafe = (res: Response, data: unknown) => {
+  if (data === undefined || data === null) {
+    res.status(201);
+    res.send();
+  } else {
+    res.send(data);
+  }
+};
+
+/** Connects a POST request with express. */
+const connectPost = (
+  app: IRouter,
+  endpoint: string,
+  func: (data: any) => Promise<any>
+) => {
+  app.post(endpoint, async (req, res) => sendSafe(res, await func(req.body)));
+};
+
+/** Connects a GET request with express. */
+const connectGet = (
+  app: IRouter,
+  endpoint: string,
+  func: () => Promise<any>
+) => {
+  app.get(endpoint, async (_, res) => sendSafe(res, await func()));
+};
+
 /** Start the server and run forever. */
-const startHttpServer = (port: number, peers: string[]) => {
-  const server = new Server(port, peers);
+const startHttpServer = (port: number) => {
+  const server = new Server(`http://localhost:${port}`);
 
   const app = express();
   app.use(bodyParser.json());
   app.use(cors());
 
-  // Write a new entry via POST.
-  app.post("/entry", async (req, res) => {
-    const content = req.body.content;
-    const id = await server.writeEntry(content);
-    console.log(`Wrote new entry, id=${id}, content=${content}`);
-    res.send(id);
-  });
-
-  // Read an entry by ID
-  app.get("/entry/:id", async (req, res) => {
-    const content = await server.getEntry(req.params.id);
-    res.send(content);
-  });
-
-  // Add a block from an external miner.
-  app.post("/block", async (req, res) => {
-    const block = req.body.block;
-    await server.addBlock(block);
-    res.status(201);
-    res.send();
-  });
-
-  // Get the entire block chain.
-  app.get("/block", async (req, res) => {
-    res.send(server.getLedger());
-  });
-
-  // TODO: Make these debug endpoints POSTS
-  // Debug endpoint for printing.
-  app.get("/debug/print", async (_, res) => {
-    server.printLedger();
-    res.status(201);
-    res.send();
-  });
-
-  app.get("/debug/start", async (_, res) => {
-    server.startMining();
-    res.status(201);
-    res.send();
-  });
-
-  // Start serving the app.
-  server.startMining(); // DON'T await this, it never returns.
+  connectPost(app, "/entries", (data) => server.addPendingEntry(data));
+  connectGet(app, "/entries", () => server.getPendingEntries());
+  connectPost(app, "/peers", (data) => server.addPeer(data));
+  connectGet(app, "/peers", () => server.getPeers());
+  connectGet(app, "/stats", () => server.getStats());
   app.listen(port, () => console.log(`Started server on port ${port}`));
 };
 

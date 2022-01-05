@@ -4,10 +4,9 @@ import { startHttpServer } from "../server/server";
 const main = async () => {
   const args = arg({
     "--port": Number,
-    "--peers": [String],
   });
 
-  startHttpServer(args["--port"] || 3000, args["--peers"] || []);
+  startHttpServer(args["--port"] || 3000);
 };
 
 main().catch(console.error);
