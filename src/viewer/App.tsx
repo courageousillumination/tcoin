@@ -1,41 +1,19 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Controls } from "./components/Controls";
-import { NetworkSummary } from "./components/NetworkSummary";
 import { NodeSummary } from "./components/NodeSummary";
 import { Tabs } from "./components/Tabs";
 
-const NODE_LOCATIONS = ["http://localhost:3000", "http://localhost:3001"];
-
 const App = () => {
-  const [nodes, setNodes] = useState<any[]>([]);
-
-  useEffect(() => {
-    setInterval(() => {
-      const func = async () => {
-        const newNodes: any[] = [];
-        for (const loc of NODE_LOCATIONS) {
-          const res = await fetch(`${loc}/block`);
-          const blocks = await res.json();
-          newNodes.push({
-            location: loc,
-            blocks,
-          });
-        }
-        setNodes(newNodes);
-      };
-      func();
-    }, 500);
-  }, [setNodes]);
-
-  const tabs = nodes.map((x, i) => ({
-    title: `Node ${i}`,
+  const [nodes, setNodes] = useState<string[]>([]);
+  const tabs = nodes.map((x) => ({
+    title: `Node at ${x}`,
     content: <NodeSummary node={x} />,
   }));
 
   return (
     <div>
-      <Controls nodes={nodes} />
-      <NetworkSummary nodes={nodes} />
+      <Controls nodes={nodes} setNodes={setNodes} />
+      <div style={{ margin: 24 }} />
       {tabs.length > 0 ? <Tabs tabs={tabs} /> : null}
     </div>
   );

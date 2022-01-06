@@ -1,10 +1,17 @@
 import express, { IRouter, Response } from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
-import { Block } from "../common/block";
+import { Block, hashBlock, isValidNextBlock, mineBlock } from "../common/block";
 import { Entry } from "../common/entry";
 import { Stat } from "../common/stat";
-import { connectPeer, writePendingEntry } from "../client/client";
+import { commitBlock, connectPeer, writePendingEntry } from "../client/client";
+
+const GENISIS_BLOCK = {
+  previousHash:
+    "0000000000000000000000000000000000000000000000000000000000000000",
+  nonce: 0,
+  content: [],
+};
 
 /**
  * A fully compliant TCoin server.
@@ -15,6 +22,16 @@ class Server {
 
   /** Entries that have been validated, but not committed. */
   private mempool: Entry[] = [];
+
+  /**
+   * The blocks known to this server.
+   *
+   * NOTE: The latest block is at the head of the list.
+   */
+  private readonly blocks: Block<Entry[]>[] = [GENISIS_BLOCK];
+
+  /** Hash rate when mining. */
+  private hashRate: number = 1;
 
   constructor(private readonly location: string) {}
 
@@ -48,16 +65,52 @@ class Server {
    * peers, and all pending entries will be removed from the mempool.
    * @param block
    */
-  public async commitBlock(block: Block) {}
+  public async commitBlock(block: Block<Entry[]>) {
+    const isValid = await isValidNextBlock(block, this.blocks[0]);
+    if (isValid) {
+      this.blocks.unshift(block);
+      // Remove all entries from the mempool
+      this.mempool = this.mempool.filter(
+        (x) => !block.content.find((y) => y.content === x.content)
+      );
+      this.mapPeers((peer) => commitBlock(peer, block));
+    }
+  }
+
+  /** Start mining on this server. Mining will run forever. */
+  public async mineForever() {
+    console.log("Starting mining...");
+    while (true) {
+      const startTime = Date.now();
+      await this.mineBlock();
+      console.log(
+        `Mined a block in ${(Date.now() - startTime) / 1000} seconds`
+      );
+    }
+  }
 
   /**
-   * Returns all blocks sinces id.
-   *
-   * If id is omitted, all blocks will be returned.
-   * @param id
+   * Attempt to mine a new block.
    */
-  public async getBlocks(id?: string): Promise<Block[]> {
-    return [];
+  public async mineBlock() {
+    const headBlock = this.blocks[0];
+    const newBlock = await mineBlock(
+      {
+        previousHash: hashBlock(headBlock),
+        nonce: 0, // This will be found.
+        // Grab a copy of everything in the mempool and add a special "mined by notification."
+        content: [`mined by ${this.location}`, ...this.mempool.slice()],
+      },
+      this.hashRate
+    );
+    this.commitBlock(newBlock as Block<Entry[]>);
+  }
+
+  /**
+   * Returns all blocks
+   */
+  public async getBlocks(): Promise<Block[]> {
+    return this.blocks;
   }
 
   /**
@@ -68,6 +121,7 @@ class Server {
    * @param peer
    */
   public async addPeer({ peer }: { peer: string }) {
+    // TODO: Synchronize on the longest chain when doing peer connection.
     if (!this.peers.includes(peer)) {
       this.peers.push(peer);
       connectPeer(peer, { peer: this.location });
@@ -90,7 +144,13 @@ class Server {
     return [
       { name: "mempool-size", value: this.mempool.length },
       { name: "peers", value: this.peers.length },
+      { name: "hashrate", value: this.hashRate },
     ];
+  }
+
+  /** Set the hash rate (if mining). */
+  public setHashRate(hashRate: number) {
+    this.hashRate = hashRate;
   }
 
   /**
@@ -149,8 +209,15 @@ const startHttpServer = (port: number) => {
   connectPost(app, "/entries", (data) => server.addPendingEntry(data));
   connectGet(app, "/entries", () => server.getPendingEntries());
   connectPost(app, "/peers", (data) => server.addPeer(data));
+  connectGet(app, "/blocks", () => server.getBlocks());
+  connectPost(app, "/blocks", (data) => server.commitBlock(data));
   connectGet(app, "/peers", () => server.getPeers());
   connectGet(app, "/stats", () => server.getStats());
+  connectPost(app, "/control/mine", () => {
+    server.mineForever();
+    return Promise.resolve();
+  });
+
   app.listen(port, () => console.log(`Started server on port ${port}`));
 };
 

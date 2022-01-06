@@ -1,4 +1,5 @@
-import fetch from "node-fetch";
+import axios from "axios"; // Used instead of fetch so I can use it in both node and browser.
+import { Block } from "../common/block";
 import { Entry } from "../common/entry";
 
 type Server = string;
@@ -13,18 +14,20 @@ type Server = string;
 const makeRequest = async (
   server: Server,
   endpoint: string,
-  method: string = "GET",
+  method: "GET" | "POST" = "GET",
   body?: unknown
 ) => {
-  const result = await fetch(`${server}${endpoint}`, {
-    body: body ? JSON.stringify(body) : undefined,
-    headers: { "Content-Type": "application/json" },
+  const result = await axios.request({
+    url: `${server}${endpoint}`,
     method,
+    data: body ? JSON.stringify(body) : undefined,
+    headers: { "Content-Type": "application/json" },
   });
+
   if (result.status == 201) {
     return null;
   } else {
-    return result.json();
+    return result.data;
   }
 };
 
@@ -52,4 +55,44 @@ const connectPeer = async (server: Server, peer: { peer: Server }) => {
   return makeRequest(server, "/peers", "POST", peer);
 };
 
-export { writePendingEntry, getPendingEntries, connectPeer };
+/**
+ * Get all active peers.
+ */
+const getPeers = async (server: Server) => {
+  return makeRequest(server, "/peers");
+};
+
+/**
+ * Commit a new block to the block chain.
+ */
+const commitBlock = async (server: Server, block: Block) => {
+  return makeRequest(server, "/blocks", "POST", block);
+};
+
+/**
+ * Get all blocks from the server.
+ */
+const getBlocks = async (server: Server) => {
+  return makeRequest(server, "/blocks");
+};
+
+/** Start a server mining. */
+const mineForever = async (server: Server) => {
+  return makeRequest(server, "/control/mine", "POST");
+};
+
+/** Start a server mining. */
+const getStats = async (server: Server) => {
+  return makeRequest(server, "/stats");
+};
+
+export {
+  writePendingEntry,
+  getPendingEntries,
+  connectPeer,
+  commitBlock,
+  mineForever,
+  getPeers,
+  getBlocks,
+  getStats,
+};

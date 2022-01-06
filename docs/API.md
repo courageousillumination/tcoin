@@ -7,7 +7,7 @@ The TCoin API operates over HTTP using REST semantics. A compliant implementatio
 - POST `/blocks`: Notify a node about a new block in the chain.
   - Body format: `{block: Block}`
   - Response: 201 on success, 400 if the block is invalid.
-- GET `/blocks?from={id}`: Returns all blocks known to the node, since the given ID. If ID is omitted all blocks will be returned
+- GET `/blocks`: Returns all blocks known to the node.
   - Response: 200 `{blocks: Block[]}`
 - POST `/peers`: Registers a new peer.
   - Body format: `{location: string}`
@@ -27,8 +27,8 @@ interface Entry {
 }
 
 interface Block {
-  /** ID for this block. */
-  id: string;
+  /** Hash of the previous block. */
+  previousHash: string
 
   /** Nonce to ensure that this block hashes properly with the previous block. */
   nonce: string;

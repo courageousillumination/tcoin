@@ -15,11 +15,25 @@ const Tabs: React.FC<TabsProps> = ({ tabs }) => {
     <div>
       <div>
         {tabs.map((x) => (
-          <button key={x.title} onClick={() => setActiveTab(x.title)}>
+          <a
+            href="#"
+            key={x.title}
+            onClick={(e) => {
+              e.preventDefault();
+              setActiveTab(x.title);
+            }}
+            style={{
+              margin: 16,
+              fontWeight: active === x ? "bold" : undefined,
+            }}
+          >
             {x.title}
-          </button>
+          </a>
         ))}
       </div>
+      <div
+        style={{ border: "1px solid gray", marginTop: 24, marginBottom: 24 }}
+      />
       {active ? active.content : null}
     </div>
   );

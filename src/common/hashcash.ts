@@ -1,6 +1,10 @@
 import crypto from "crypto";
 
-/** Count leading zeros in a string. */
+/**
+ * Count leading zeros in a string.
+ * @param hash
+ * @returns
+ */
 const countZeros = (hash: string): number => {
   for (let i = 0; i < hash.length; i++) {
     if (hash[i] !== "0") {
@@ -11,42 +15,50 @@ const countZeros = (hash: string): number => {
 };
 
 /**
- * Produces a nonce that satisfies the hash cash algorithm
- *
- * Specifically, this will find a string that when concatenated with content
- * produces a hash that has at least `difficulty` leading zeros.
- *
- * Optionally takes in a slow down parameter so we don't completely pin the CPU...
+ * Does the core work of the hashcash algorithm.
+ * @param fac A function to produce a hash given a nonce.
+ * @param difficulty Target difficulty for the work.
+ * @param targetHashRate A best effort hash rate (measured in kHashes / second)
  */
-const findToken = async (
-  content: string,
+const doWork = async (
+  fac: (nonce: number) => string,
   difficulty: number,
-  slowdown = false
-): Promise<string> => {
-  const start = Math.floor(Math.random() * 10000);
-
-  for (let nonce = start; ; nonce++) {
-    if (verifyToken(content, `${nonce}`, difficulty)) {
-      return `${nonce}`;
+  targetHashRate: number = Infinity
+) => {
+  let startTime = Date.now();
+  for (let nonce = 0; ; nonce++) {
+    if (verifyHash(fac(nonce), difficulty)) {
+      return nonce;
     }
-    if (slowdown) {
-      await new Promise((resolve) => setTimeout(resolve, 1));
+    if (nonce % 1000 === 0 && isFinite(targetHashRate)) {
+      const targetTime = startTime + 1000 / targetHashRate;
+      const currentTime = Date.now();
+      if (currentTime < targetTime) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, targetTime - currentTime)
+        );
+      }
+      startTime = Date.now();
     }
   }
 };
 
-/** Verify a token meets the requirements. */
-const verifyToken = (
-  content: string,
-  nonce: string,
-  difficulty: number
-): boolean => {
-  return countZeros(getHash(content + nonce)) >= difficulty;
-};
+/**
+ * Verify if a hash meets the requirements for a given difficulty level.
+ * @param hash
+ * @param difficulty
+ * @returns
+ */
+const verifyHash = (hash: string, difficulty: number) =>
+  countZeros(hash) >= difficulty;
 
-/** Gets the hash for a content + nonce. */
+/**
+ * Gets the hash for a given string.
+ * @param content
+ * @returns
+ */
 const getHash = (content: string): string => {
   return crypto.createHash("sha256").update(content).digest("hex");
 };
 
-export { findToken, verifyToken, getHash };
+export { doWork, verifyHash, getHash };
