@@ -13,10 +13,11 @@ interface NodeProps {
 const useNodeData = (node: string, func: (node: string) => unknown) => {
   const [data, setData] = useState<unknown>();
   useEffect(() => {
-    setInterval(async () => {
+    const i = setInterval(async () => {
       const d = await func(node);
       setData(d);
     }, 1000);
+    return () => clearInterval(i);
   }, [node, setData]);
   return data;
 };

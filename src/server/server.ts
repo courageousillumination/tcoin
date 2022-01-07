@@ -192,6 +192,7 @@ class Server {
       { name: "mempool-size", value: this.mempool.length },
       { name: "peers", value: this.peers.length },
       { name: "hashrate", value: this.hashRate },
+      { name: "chain-length", value: this.blocks.length },
     ];
   }
 

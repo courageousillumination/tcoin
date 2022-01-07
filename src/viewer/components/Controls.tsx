@@ -41,7 +41,7 @@ interface Props {
 
 /** Control to add a new node to the viewer. */
 const AddNode: React.FC<Props> = ({ setNodes }) => {
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState("http://localhost:3000");
   const addNode = async (node: string) => {
     const peers = await getPeers(node);
     setNodes((old) => {

@@ -31,13 +31,16 @@
     "viewer": "yarn run parcel src/viewer/index.html"
   },
   "dependencies": {
+    "@types/react-d3-graph": "^2.6.3",
     "arg": "^5.0.1",
     "axios": "^0.24.0",
     "body-parser": "^1.19.1",
     "cors": "^2.8.5",
+    "d3": "^7.2.1",
     "express": "^4.17.2",
     "node-fetch": "2",
     "react": "^17.0.2",
+    "react-d3-graph": "^2.6.0",
     "react-dom": "^17.0.2"
   },
   "jest": {
