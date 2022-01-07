@@ -1,10 +1,21 @@
 import express, { IRouter, Response } from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
-import { Block, hashBlock, isValidNextBlock, mineBlock } from "../common/block";
+import {
+  Block,
+  hashBlock,
+  isValidNextBlock,
+  mineBlock,
+  validateBlocks,
+} from "../common/block";
 import { Entry } from "../common/entry";
 import { Stat } from "../common/stat";
-import { commitBlock, connectPeer, writePendingEntry } from "../client/client";
+import {
+  syncChain,
+  connectPeer,
+  getBlocks,
+  writePendingEntry,
+} from "../client/client";
 
 const GENISIS_BLOCK = {
   previousHash:
@@ -28,7 +39,7 @@ class Server {
    *
    * NOTE: The latest block is at the head of the list.
    */
-  private readonly blocks: Block<Entry[]>[] = [GENISIS_BLOCK];
+  private blocks: Block<Entry[]>[] = [GENISIS_BLOCK];
 
   /** Hash rate when mining. */
   private hashRate: number = 1;
@@ -73,8 +84,41 @@ class Server {
       this.mempool = this.mempool.filter(
         (x) => !block.content.find((y) => y.content === x.content)
       );
-      this.mapPeers((peer) => commitBlock(peer, block));
+      // NOTE: This is very wasteful, since we are syncing the entire chain.
+      // We may want to revisit this to ensure that we can send minimal deltas, but
+      // that requires a lot of back and forth negotiation.
+      this.mapPeers((peer) => syncChain(peer, this.blocks));
     }
+  }
+
+  /**
+   * Sync the entire block chain.
+   *
+   * Will replace the current chain if the new chain is longer, valid,
+   * and has the same genisis block.
+   * @param blocks
+   * @returns
+   */
+  public async syncChain(blocks: Block<Entry[]>[]) {
+    // Only accept new changes that are longer.
+    if (this.blocks.length >= blocks.length) {
+      return;
+    }
+
+    // Ensure that the genisis block is the same
+    const genisisBlock1 = blocks[blocks.length - 1];
+    const genisisBlock2 = this.blocks[this.blocks.length - 1];
+    if (hashBlock(genisisBlock1) != hashBlock(genisisBlock2)) {
+      return;
+    }
+
+    // Make sure the rest of the chain is valid
+    if (!(await validateBlocks(blocks))) {
+      return;
+    }
+
+    // Everything looks good, so commit this.
+    this.blocks = blocks;
   }
 
   /** Start mining on this server. Mining will run forever. */
@@ -99,7 +143,10 @@ class Server {
         previousHash: hashBlock(headBlock),
         nonce: 0, // This will be found.
         // Grab a copy of everything in the mempool and add a special "mined by notification."
-        content: [`mined by ${this.location}`, ...this.mempool.slice()],
+        content: [
+          { content: `mined by ${this.location}` },
+          ...this.mempool.slice(),
+        ],
       },
       this.hashRate
     );
@@ -121,10 +168,10 @@ class Server {
    * @param peer
    */
   public async addPeer({ peer }: { peer: string }) {
-    // TODO: Synchronize on the longest chain when doing peer connection.
     if (!this.peers.includes(peer)) {
       this.peers.push(peer);
-      connectPeer(peer, { peer: this.location });
+      await connectPeer(peer, { peer: this.location });
+      this.syncChain(await getBlocks(peer));
     }
   }
 
@@ -210,7 +257,7 @@ const startHttpServer = (port: number) => {
   connectGet(app, "/entries", () => server.getPendingEntries());
   connectPost(app, "/peers", (data) => server.addPeer(data));
   connectGet(app, "/blocks", () => server.getBlocks());
-  connectPost(app, "/blocks", (data) => server.commitBlock(data));
+  connectPost(app, "/blocks", (data) => server.syncChain(data));
   connectGet(app, "/peers", () => server.getPeers());
   connectGet(app, "/stats", () => server.getStats());
   connectPost(app, "/control/mine", () => {

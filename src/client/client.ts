@@ -63,10 +63,10 @@ const getPeers = async (server: Server) => {
 };
 
 /**
- * Commit a new block to the block chain.
+ * Sync the block chain.
  */
-const commitBlock = async (server: Server, block: Block) => {
-  return makeRequest(server, "/blocks", "POST", block);
+const syncChain = async (server: Server, blocks: Block[]) => {
+  return makeRequest(server, "/blocks", "POST", blocks);
 };
 
 /**
@@ -90,7 +90,7 @@ export {
   writePendingEntry,
   getPendingEntries,
   connectPeer,
-  commitBlock,
+  syncChain,
   mineForever,
   getPeers,
   getBlocks,
