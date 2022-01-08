@@ -1,26 +1,14 @@
-import { useEffect, useState } from "react";
 import { getBlocks, getStats } from "../../client/client";
 import { Block } from "../../common/block";
 import { Stat } from "../../common/stat";
 import { BlockChain } from "./BlockChain";
 import { Stats } from "./Stats";
 import { Tabs } from "./Tabs";
+import { useNodeData } from "../hooks/useNodeData";
 
 interface NodeProps {
   node: string;
 }
-
-const useNodeData = (node: string, func: (node: string) => unknown) => {
-  const [data, setData] = useState<unknown>();
-  useEffect(() => {
-    const i = setInterval(async () => {
-      const d = await func(node);
-      setData(d);
-    }, 1000);
-    return () => clearInterval(i);
-  }, [node, setData]);
-  return data;
-};
 
 const NodeSummary: React.FC<NodeProps> = ({ node }) => {
   const blocks = useNodeData(node, getBlocks) as Block[];

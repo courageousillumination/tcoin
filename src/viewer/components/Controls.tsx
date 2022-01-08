@@ -6,35 +6,6 @@ interface ControlsProps {
   setNodes: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
-const WriteEntry: React.FC<{ nodes: string[] }> = ({ nodes }) => {
-  const [node, setNode] = useState(nodes[0]);
-  const [message, setMessage] = useState("");
-
-  return (
-    <div>
-      <div>Send a message to the network</div>
-      <div style={{ display: "flex", flexDirection: "row", gap: "8px" }}>
-        <input value={message} onChange={(e) => setMessage(e.target.value)} />
-        <select value={`${node}`} onChange={(e) => setNode(e.target.value)}>
-          <option>---</option>
-          {nodes.map((x) => (
-            <option key={x} value={x}>
-              {x}
-            </option>
-          ))}
-        </select>
-        <button
-          onClick={async () => {
-            writePendingEntry(node, { content: message });
-          }}
-        >
-          Send
-        </button>
-      </div>
-    </div>
-  );
-};
-
 interface Props {
   setNodes: React.Dispatch<React.SetStateAction<string[]>>;
 }
@@ -89,7 +60,6 @@ const Controls: React.FC<ControlsProps> = ({ nodes, setNodes }) => {
   return (
     <div>
       <AddNode setNodes={setNodes} />
-      <WriteEntry nodes={nodes} />
       <StartMining nodes={nodes} />
     </div>
   );

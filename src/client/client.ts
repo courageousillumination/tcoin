@@ -1,6 +1,6 @@
 import axios from "axios"; // Used instead of fetch so I can use it in both node and browser.
 import { Block } from "../common/block";
-import { Entry } from "../common/entry";
+import { Transaction } from "../common/types";
 
 type Server = string;
 
@@ -37,7 +37,7 @@ const makeRequest = async (
  * @param content
  * @returns
  */
-const writePendingEntry = async (server: Server, entry: Entry) => {
+const writePendingEntry = async (server: Server, entry: Transaction) => {
   return makeRequest(server, "/entries", "POST", entry);
 };
 

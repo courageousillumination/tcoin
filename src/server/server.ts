@@ -8,7 +8,6 @@ import {
   mineBlock,
   validateBlocks,
 } from "../common/block";
-import { Entry } from "../common/entry";
 import { Stat } from "../common/stat";
 import {
   syncChain,
@@ -16,6 +15,12 @@ import {
   getBlocks,
   writePendingEntry,
 } from "../client/client";
+import { Transaction } from "../common/types";
+import {
+  createWallet,
+  digestTransaction,
+  verifyTransaction,
+} from "../common/transaction";
 
 const GENISIS_BLOCK = {
   previousHash:
@@ -32,31 +37,41 @@ class Server {
   private readonly peers: string[] = [];
 
   /** Entries that have been validated, but not committed. */
-  private mempool: Entry[] = [];
+  private mempool: Transaction[] = [];
 
   /**
    * The blocks known to this server.
    *
    * NOTE: The latest block is at the head of the list.
    */
-  private blocks: Block<Entry[]>[] = [GENISIS_BLOCK];
+  private blocks: Block<Transaction[]>[] = [GENISIS_BLOCK];
 
   /** Hash rate when mining. */
   private hashRate: number = 1;
 
-  constructor(private readonly location: string) {}
+  private readonly wallet = createWallet();
+
+  constructor(private readonly location: string) {
+    // DO NOT DO THIS. It leaks private keys.
+    console.log(this.wallet);
+  }
 
   /**
-   * Adds a new entry, in the pending state.
+   * Adds a new transaction to the mempool.
    *
-   * A new entry will be broadcast to all peers. A server will deduplicate entries
-   * based on the content of that entry.
+   * A transaction will be added only if it is valid based on everything in the current blocks
+   * TODO: We probably also need to check against all transactions in the mem pool?
    */
-  public async addPendingEntry(entry: Entry) {
-    const found = this.mempool.find((x) => x.content === entry.content);
-    if (!found) {
-      this.mempool.push(entry);
-      this.mapPeers((peer) => writePendingEntry(peer, entry));
+  public async addPendingEntry(transaction: Transaction) {
+    const exists = this.mempool.find(
+      (x) => digestTransaction(x) === digestTransaction(transaction)
+    );
+    if (!exists) {
+      const isValid = await verifyTransaction(transaction, this.blocks);
+      if (isValid) {
+        this.mempool.push(transaction);
+        this.mapPeers((peer) => writePendingEntry(peer, transaction));
+      }
     }
   }
 
@@ -64,7 +79,7 @@ class Server {
    * Returns all items in the mempool (pending entries).
    * @returns
    */
-  public async getPendingEntries(): Promise<Entry[]> {
+  public async getPendingEntries(): Promise<Transaction[]> {
     return this.mempool;
   }
 
@@ -76,14 +91,21 @@ class Server {
    * peers, and all pending entries will be removed from the mempool.
    * @param block
    */
-  public async commitBlock(block: Block<Entry[]>) {
+  public async commitBlock(block: Block<Transaction[]>) {
+    // TODO: Validate all of the transactions in the block.
     const isValid = await isValidNextBlock(block, this.blocks[0]);
     if (isValid) {
       this.blocks.unshift(block);
       // Remove all entries from the mempool
+
       this.mempool = this.mempool.filter(
-        (x) => !block.content.find((y) => y.content === x.content)
+        (x) =>
+          !block.content.find(
+            (y) => digestTransaction(x) === digestTransaction(y)
+          )
       );
+      // TODO: Need to verify all pending transactions at this point (or later...)
+
       // NOTE: This is very wasteful, since we are syncing the entire chain.
       // We may want to revisit this to ensure that we can send minimal deltas, but
       // that requires a lot of back and forth negotiation.
@@ -99,7 +121,7 @@ class Server {
    * @param blocks
    * @returns
    */
-  public async syncChain(blocks: Block<Entry[]>[]) {
+  public async syncChain(blocks: Block<Transaction[]>[]) {
     // Only accept new changes that are longer.
     if (this.blocks.length >= blocks.length) {
       return;
@@ -116,6 +138,7 @@ class Server {
     if (!(await validateBlocks(blocks))) {
       return;
     }
+    // TODO: Need to validate all transactions in blocks.
 
     // Everything looks good, so commit this.
     this.blocks = blocks;
@@ -144,13 +167,19 @@ class Server {
         nonce: 0, // This will be found.
         // Grab a copy of everything in the mempool and add a special "mined by notification."
         content: [
-          { content: `mined by ${this.location}` },
+          // Coinbase transaction (a single coin per block.)
+          {
+            source: null,
+            destination: this.wallet[0],
+            amount: 1,
+            signature: null,
+          },
           ...this.mempool.slice(),
-        ],
+        ] as Transaction[],
       },
       this.hashRate
     );
-    this.commitBlock(newBlock as Block<Entry[]>);
+    this.commitBlock(newBlock as Block<Transaction[]>);
   }
 
   /**

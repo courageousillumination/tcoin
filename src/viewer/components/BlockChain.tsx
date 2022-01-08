@@ -1,13 +1,14 @@
 import { Block } from "../../common/block";
+import { Transaction } from "../../common/types";
 
 interface BlockChainProps {
   blocks: Block<any>[];
 }
 
-const BlockComponent: React.FC<{ block: Block; depth: number }> = ({
-  block,
-  depth,
-}) => {
+const BlockComponent: React.FC<{
+  block: Block<Transaction[]>;
+  depth: number;
+}> = ({ block, depth }) => {
   return (
     <table>
       <tbody>
@@ -25,9 +26,30 @@ const BlockComponent: React.FC<{ block: Block; depth: number }> = ({
         </tr>
 
         <tr>
-          <td>Content</td>
+          <td>Transactions</td>
           <td>
-            <pre>{JSON.stringify(block.content)}</pre>
+            <table>
+              <tbody>
+                <thead>
+                  <tr>
+                    <th>Source</th>
+                    <th>Dest</th>
+                    <th>Amount</th>
+                    <th>Signature</th>
+                  </tr>
+                </thead>
+                {block.content.map((trans, i) => {
+                  return (
+                    <tr key={i}>
+                      <td>{trans.source?.slice(0, 10)}</td>
+                      <td>{trans.destination?.slice(0, 10)}</td>
+                      <td>{trans.amount}</td>
+                      <td>{trans.signature?.slice(0, 10)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </td>
         </tr>
       </tbody>
