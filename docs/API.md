@@ -1,3 +1,26 @@
+# TCoin 0.2
+
+The TCoin protocol supports the following messages:
+
+- peers: All addresses of the network. Usually sent as a response to a getaddr, or when a new
+  node joins the network and wants to broadcast its location. (addr in btc)
+- getPeers: Request addresses on the network. (getaddr in btc)
+
+To support ease of interaction, thes API has a REST wrapper
+
+- POST /addr: Handles an addr message
+- GET /addr:
+
+For persistent connections, the sample implementaion also supports websockets and JSON
+encoded messages.
+
+# Notes
+
+Is it actually worthwhile to make this connectionless. Stateless makes it easier to interact
+with via `POST` but also makes it harder
+
+# Legacy API documentation.
+
 The TCoin API operates over HTTP using REST semantics. A compliant implementation of the TCoin server must expose the following endpoints:
 
 - POST `/entries`: Creates a new entry in the Tcoin block chain. This entry will be added to the mempool, and may or may not be committed. Entries are uniquely identified by their content, so duplicate entries may be dropped.

@@ -1,98 +1,15 @@
-import axios from "axios"; // Used instead of fetch so I can use it in both node and browser.
-import { Block } from "../common/block";
-import { Transaction } from "../common/types";
+import { TCoinMessage } from "../protocol/messages";
 
-type Server = string;
+/** Interface for a TCoin client protocol. */
+interface Client {
+  /** Sends a message to a single client. */
+  sendMessage: (
+    node: string,
+    message: TCoinMessage
+  ) => Promise<TCoinMessage | null>;
 
-/**
- * Make a post request to the server and parse the result.
- * @param server
- * @param endpoint
- * @param body
- * @returns
- */
-const makeRequest = async (
-  server: Server,
-  endpoint: string,
-  method: "GET" | "POST" = "GET",
-  body?: unknown
-) => {
-  const result = await axios.request({
-    url: `${server}${endpoint}`,
-    method,
-    data: body ? JSON.stringify(body) : undefined,
-    headers: { "Content-Type": "application/json" },
-  });
+  /** Broadcasts a message to all clients. */
+  broadcast: (nodes: string[], message: TCoinMessage) => Promise<void>;
+}
 
-  if (result.status == 201) {
-    return null;
-  } else {
-    return result.data;
-  }
-};
-
-/**
- * Write a new entry to the server.
- * @param server
- * @param content
- * @returns
- */
-const writePendingEntry = async (server: Server, entry: Transaction) => {
-  return makeRequest(server, "/entries", "POST", entry);
-};
-
-/**
- * Get all pending entries
- */
-const getPendingEntries = async (server: Server) => {
-  return makeRequest(server, "/entries");
-};
-
-/**
- * Connect a peer.
- */
-const connectPeer = async (server: Server, peer: { peer: Server }) => {
-  return makeRequest(server, "/peers", "POST", peer);
-};
-
-/**
- * Get all active peers.
- */
-const getPeers = async (server: Server) => {
-  return makeRequest(server, "/peers");
-};
-
-/**
- * Sync the block chain.
- */
-const syncChain = async (server: Server, blocks: Block[]) => {
-  return makeRequest(server, "/blocks", "POST", blocks);
-};
-
-/**
- * Get all blocks from the server.
- */
-const getBlocks = async (server: Server) => {
-  return makeRequest(server, "/blocks");
-};
-
-/** Start a server mining. */
-const mineForever = async (server: Server) => {
-  return makeRequest(server, "/control/mine", "POST");
-};
-
-/** Start a server mining. */
-const getStats = async (server: Server) => {
-  return makeRequest(server, "/stats");
-};
-
-export {
-  writePendingEntry,
-  getPendingEntries,
-  connectPeer,
-  syncChain,
-  mineForever,
-  getPeers,
-  getBlocks,
-  getStats,
-};
+export { Client };

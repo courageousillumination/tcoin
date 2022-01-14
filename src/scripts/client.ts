@@ -1,19 +1,23 @@
 import arg from "arg";
-import { connectPeer, mineForever, writePendingEntry } from "../client/client";
+import { HttpClient } from "../client/httpClient";
 
 const main = async () => {
   const args = arg({
-    "--peer": String,
-    "--mine": Boolean,
+    "--message": String,
+    "--port": Number,
+    "--host": String,
   });
 
-  if (args["--peer"]) {
-    await connectPeer("http://localhost:3000", { peer: args["--peer"] });
-  } else if (args["--mine"]) {
-    await mineForever("http://localhost:3000");
-  } else {
-    console.log("Incorrect usage.");
-  }
+  const node = `${args["--host"] || "http://localhost"}:${
+    args["--port"] || 3000
+  }`;
+
+  const client = new HttpClient();
+  const response = await client.sendMessage(
+    node,
+    JSON.parse(args["--message"] || "")
+  );
+  console.log(response);
 };
 
 main().catch(console.error);
