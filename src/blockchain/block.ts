@@ -1,4 +1,5 @@
 import { hash } from "../common/crypto";
+import { Transaction } from "./transaction";
 
 /**
  * Block header includes metadata about a block.
@@ -20,6 +21,9 @@ interface BlockHeader {
 interface Block {
   /** Header information for the block. */
   header: BlockHeader;
+
+  /** Content of the block is going to be a series of transactions. */
+  content: Transaction[];
 }
 
 /**
@@ -30,7 +34,11 @@ const hashBlock = (block: Block) => {
   return hash(
     block.header.previousHash +
       block.header.nonce.toString() +
-      block.header.difficulty.toString()
+      block.header.difficulty.toString() +
+      // NOTE: This is going to add a bunch of extra JSON. Bitcoin
+      // encodes as a merkle tree and only computes the hash once. We'll
+      // look into this for future iterations.
+      JSON.stringify(block.content)
   );
 };
 

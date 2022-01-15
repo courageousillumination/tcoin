@@ -1,4 +1,5 @@
 import { Block } from "../blockchain/block";
+import { Transaction } from "../blockchain/transaction";
 
 /**
  * A peers message notifies another node about the current version.
@@ -70,6 +71,19 @@ interface GetBlocksMessage {
 }
 
 /**
+ * Broadcast information about transactions.
+ *
+ * NOTE: This is usually used to send new transactions to the network. To get
+ * verified transactions, check the blocks.
+ *
+ * Response: None
+ */
+interface TransactionsMessage {
+  type: "transactions";
+  transactions: Transaction[];
+}
+
+/**
  * A TCoinMessage contains various information or commands for nodes on the TCoin network.
  */
 type TCoinMessage =
@@ -79,7 +93,8 @@ type TCoinMessage =
   | VersionAckMessage
   | BlocksMessage
   | GetBlocksMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | TransactionsMessage;
 
 /** Generates a PeersMessage. */
 const peersMessage = (peers: string[]): PeersMessage => ({
@@ -116,6 +131,14 @@ const getBlocksMessage = (): GetBlocksMessage => ({
   type: "getBlocks",
 });
 
+/** Generates a TransactionsMessage. */
+const transactionsMessage = (
+  transactions: Transaction[]
+): TransactionsMessage => ({
+  type: "transactions",
+  transactions,
+});
+
 export {
   TCoinMessage,
   GetPeersMessage,
@@ -125,6 +148,7 @@ export {
   ErrorMessage,
   BlocksMessage,
   GetBlocksMessage,
+  TransactionsMessage,
   peersMessage,
   getPeersMessage,
   versionMessage,
@@ -132,4 +156,5 @@ export {
   errorMessage,
   blocksMessage,
   getBlocksMessage,
+  transactionsMessage,
 };

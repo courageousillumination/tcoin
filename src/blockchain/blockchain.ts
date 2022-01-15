@@ -1,5 +1,6 @@
 import { Block, hashBlock } from "./block";
 import { findNonce, verifyHashcash } from "./hashcash";
+import { Transaction, verifyTransaction } from "./transaction";
 
 // TODO: Make this adjustable.
 const DIFFICULTY = 3;
@@ -11,6 +12,7 @@ const GENESIS_BLOCK: Block = {
     nonce: 0,
     difficulty: 3,
   },
+  content: [],
 };
 
 /**
@@ -43,7 +45,7 @@ class Blockchain {
       const block = blocks[i];
       if (
         hashBlock(previousBlock) !== block.header.previousHash ||
-        !this.verifyBlockHash(block)
+        !this.verifyBlock(block)
       ) {
         console.error("Blockchain verification failed");
         return false;
@@ -63,32 +65,77 @@ class Blockchain {
   /**
    * Mines a new block, using the head of the blockchain.
    */
-  public async mineBlock(): Promise<Block> {
+  public async mineBlock(transactions: Transaction[]): Promise<Block> {
     const headBlock = this.blocks[this.blocks.length - 1];
     const previousHash = hashBlock(headBlock);
-    const buildNewBlock = (nonce: number) =>
-      hashBlock({
-        header: {
-          previousHash,
-          nonce,
-          difficulty: DIFFICULTY,
-        },
-      });
-    const nonce = await findNonce(buildNewBlock, DIFFICULTY, 1);
-    return {
+    const buildNewBlock = (nonce: number) => ({
       header: {
         previousHash,
         nonce,
         difficulty: DIFFICULTY,
       },
-    };
+      content: transactions,
+    });
+    const nonce = await findNonce(
+      (x) => hashBlock(buildNewBlock(x)),
+      DIFFICULTY,
+      1
+    );
+    return buildNewBlock(nonce);
   }
 
   /**
-   * Verifes that a block hashes properly.
+   * Verifies that a block is valid.
    */
-  public verifyBlockHash(block: Block): boolean {
-    return verifyHashcash(hashBlock(block), DIFFICULTY);
+  public async verifyBlock(block: Block): Promise<boolean> {
+    if (!verifyHashcash(hashBlock(block), DIFFICULTY)) {
+      return false;
+    }
+
+    // Verify all of the transactions are valid.
+    // Skip the first one which is used for the coinbase transaction.
+    // TODO: Validation of coinbase?
+    for (const transaction of block.content.slice(1)) {
+      if (
+        !(await verifyTransaction(
+          transaction,
+          this.getTransactionAsync.bind(this)
+        ))
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Gets a transaction by transaction id.
+   * @param id
+   * @returns
+   */
+  public getTransaction(id: string): Transaction | null {
+    for (const block of this.blocks) {
+      for (const transaction of block.content) {
+        if (transaction.id === id) {
+          return transaction;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Async version of get transaction. Rejects if the transaction can not be found.
+   * @param id
+   * @returns
+   */
+  public async getTransactionAsync(id: string): Promise<Transaction> {
+    const transaction = this.getTransaction(id);
+    if (transaction === null) {
+      throw new Error("Unknown transaction");
+    }
+    return transaction;
   }
 }
 

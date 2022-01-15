@@ -11,6 +11,7 @@ import { useContext, useMemo, useState } from "react";
 import { Blockchain } from "../blockchain/blockchain";
 import { useMessage } from "./hooks/useMessage";
 import { Block, hashBlock } from "../blockchain/block";
+import { Wallet } from "./components/Wallet";
 
 const SendMessage: React.FC = () => {
   const [node, setNode] = useState("");
@@ -132,6 +133,7 @@ class MockBlockchain extends Blockchain {
         nonce: 0,
         difficulty: 0,
       },
+      content: [],
     };
   }
 
@@ -153,7 +155,7 @@ const App = () => {
   //   </ClientContext.Provider>
   // );
 
-  return <RealApp />;
+  return <Wallet />;
 };
 
 export { App };

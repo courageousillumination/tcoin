@@ -1,5 +1,11 @@
 import { Blockchain } from "../blockchain/blockchain";
+import {
+  createCoinbaseTransaction,
+  Transaction,
+  verifyTransaction,
+} from "../blockchain/transaction";
 import { Client } from "../client/client";
+import { createKeyPair } from "../common/crypto";
 import {
   TCoinMessage,
   PeersMessage,
@@ -13,6 +19,8 @@ import {
   BlocksMessage,
   GetBlocksMessage,
   blocksMessage,
+  TransactionsMessage,
+  transactionsMessage,
 } from "../protocol/messages";
 
 class TCoinServer {
@@ -29,11 +37,19 @@ class TCoinServer {
   /** Controls whether the node should be mining. */
   private shouldMine = false;
 
+  /** Keys used by this server for mining. */
+  private readonly keyPair = createKeyPair();
+
+  /** A set of transactions that have not yet been committed. */
+  private mempool: Transaction[] = [];
+
   constructor(
     private readonly address: string,
     private readonly client: Client,
     private readonly blockchain: Blockchain
-  ) {}
+  ) {
+    console.log(this.keyPair);
+  }
 
   public setShouldMining(shouldMine: boolean) {
     this.shouldMine = shouldMine;
@@ -60,6 +76,8 @@ class TCoinServer {
         return this.handleBlocks(message);
       case "getBlocks":
         return this.handleGetBlocks(message);
+      case "transactions":
+        return this.handleTransactions(message);
       case "versionAck":
         // No response required.
         return null;
@@ -75,6 +93,12 @@ class TCoinServer {
    */
   private handleBlocks(message: BlocksMessage) {
     if (this.blockchain.mergeBlocks(message.blocks)) {
+      // Update the mempool to only those that are not in the new blocks.
+      // TODO: Need to go through and update the mempool to revalidate transactions.
+      this.mempool = this.mempool.filter(
+        (x) => this.blockchain.getTransaction(x.id) === null
+      );
+
       // We sucessfully merged this in, let everyone else know.
       this.client.broadcast(
         this.peers,
@@ -82,6 +106,37 @@ class TCoinServer {
       );
     }
     return null;
+  }
+
+  /**
+   * Handles a transactions message. If the transactions are valid they are added
+   * to the mempool for future commits.
+   * @param message
+   */
+  private handleTransactions(message: TransactionsMessage) {
+    for (const transaction of message.transactions) {
+      if (this.mempool.find((x) => x.id === transaction.id)) {
+        // We already know about this transaction, carry on.
+        continue;
+      }
+      this.verifyTransaction(transaction);
+    }
+    return null;
+  }
+
+  /**
+   * Verify that a transaction is valid. If so, add it to the mempool.
+   * @param transaction
+   */
+  private async verifyTransaction(transaction: Transaction) {
+    const verified = await verifyTransaction(
+      transaction,
+      this.blockchain.getTransactionAsync.bind(this.blockchain)
+    );
+    if (verified) {
+      this.mempool.push(transaction);
+      this.client.broadcast(this.peers, transactionsMessage([transaction]));
+    }
   }
 
   /** Handle a get blocks message and returns all known blocks. */
@@ -141,11 +196,15 @@ class TCoinServer {
   }
 
   /**
-   * Mine new blocks on this server.
+   * Mines new blocks on this server.
    */
   private async mine() {
     while (this.shouldMine) {
-      const block = await this.blockchain.mineBlock();
+      const coinbase = createCoinbaseTransaction(this.keyPair.pub, 1);
+      const block = await this.blockchain.mineBlock([
+        coinbase,
+        ...this.mempool,
+      ]);
       this.handleBlocks(blocksMessage([...this.blockchain.getBlocks(), block]));
     }
   }
