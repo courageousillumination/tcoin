@@ -17,3 +17,18 @@ First of all I want to support a very simple "name registry" smart contract.
     ()
     (setStorage "key" "value"))
 ```
+
+Ok, so basically I want to define a couple of functions that let someone interact
+with the registry. I need a constructor that creates the registry. And then I need
+a fuction to query it. And I need a function to set a value.
+
+So the entire smart contract may look something like this:
+
+`
+(set! register-value (lambda (key value) (setStorage! key value)))
+
+(set! get-value (lambda (key) (getStorage key)))
+`
+
+Then we could interact with this either via directly inspecting the blockchain, or via
+another smart contract.
