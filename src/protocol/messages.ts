@@ -84,6 +84,24 @@ interface TransactionsMessage {
 }
 
 /**
+ * Request a deployment of a smart contract.
+ */
+interface DeploySmartContractMessage {
+  type: "deploySmartContract";
+  code: string;
+}
+
+/**
+ * Request a call of a SmartContract
+ */
+interface CallSmartContractMessage {
+  type: "callSmartContract";
+  id: string;
+  func: string;
+  args: unknown[];
+}
+
+/**
  * A TCoinMessage contains various information or commands for nodes on the TCoin network.
  */
 type TCoinMessage =
@@ -94,7 +112,9 @@ type TCoinMessage =
   | BlocksMessage
   | GetBlocksMessage
   | ErrorMessage
-  | TransactionsMessage;
+  | TransactionsMessage
+  | CallSmartContractMessage
+  | DeploySmartContractMessage;
 
 /** Generates a PeersMessage. */
 const peersMessage = (peers: string[]): PeersMessage => ({
@@ -139,6 +159,26 @@ const transactionsMessage = (
   transactions,
 });
 
+/** Generates a deploy smart contract message. */
+const deploySmartContractMessage = (
+  code: string
+): DeploySmartContractMessage => ({
+  type: "deploySmartContract",
+  code,
+});
+
+/** Generates a deploy smart contract message. */
+const callSmartContractMessage = (
+  id: string,
+  func: string,
+  args: unknown[]
+): CallSmartContractMessage => ({
+  type: "callSmartContract",
+  id,
+  func,
+  args,
+});
+
 export {
   TCoinMessage,
   GetPeersMessage,
@@ -149,6 +189,8 @@ export {
   BlocksMessage,
   GetBlocksMessage,
   TransactionsMessage,
+  DeploySmartContractMessage,
+  CallSmartContractMessage,
   peersMessage,
   getPeersMessage,
   versionMessage,
@@ -157,4 +199,6 @@ export {
   blocksMessage,
   getBlocksMessage,
   transactionsMessage,
+  deploySmartContractMessage,
+  callSmartContractMessage,
 };

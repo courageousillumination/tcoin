@@ -1,4 +1,5 @@
 import { Blockchain } from "../blockchain/blockchain";
+import { hashSmartContract, SmartContract } from "../blockchain/smartContract";
 import {
   createCoinbaseTransaction,
   Transaction,
@@ -21,7 +22,12 @@ import {
   blocksMessage,
   TransactionsMessage,
   transactionsMessage,
+  DeploySmartContractMessage,
+  CallSmartContractMessage,
 } from "../protocol/messages";
+import { Evaluator, ExecutionEnvironment } from "../t-lisp/evaluate";
+import { parse } from "../t-lisp/parse";
+import { tokenize } from "../t-lisp/tokenize";
 
 class TCoinServer {
   /** Current server version. Should only be incremented when the protocol changes. */
@@ -42,6 +48,9 @@ class TCoinServer {
 
   /** A set of transactions that have not yet been committed. */
   private mempool: Transaction[] = [];
+
+  // Do the smart contracts locally, we'll haul them off to the block chain later.
+  private contracts: SmartContract[] = [];
 
   constructor(
     private readonly address: string,
@@ -78,6 +87,10 @@ class TCoinServer {
         return this.handleGetBlocks(message);
       case "transactions":
         return this.handleTransactions(message);
+      case "deploySmartContract":
+        return this.handleDeploySmartContract(message);
+      case "callSmartContract":
+        return this.handleCallSmartContract(message);
       case "versionAck":
         // No response required.
         return null;
@@ -105,6 +118,60 @@ class TCoinServer {
         blocksMessage(this.blockchain.getBlocks())
       );
     }
+    return null;
+  }
+
+  private handleDeploySmartContract(message: DeploySmartContractMessage) {
+    const contract: SmartContract = {
+      id: "",
+      code: message.code,
+      storage: {},
+    };
+    contract.id = hashSmartContract(contract);
+    for (const c of this.contracts) {
+      if (c.id === contract.id) {
+        // we've already deployed this exact contract.
+        return null;
+      }
+    }
+    this.contracts.push(contract);
+    return null;
+  }
+
+  private handleCallSmartContract(message: CallSmartContractMessage) {
+    for (const contract of this.contracts) {
+      if (contract.id === message.id) {
+        const stateCopy = { ...contract.storage };
+        const executionEnvironment: ExecutionEnvironment = {
+          getStorage: (key) => stateCopy[key],
+          setStorage: (key, value) => {
+            stateCopy[key] = value;
+          },
+        };
+
+        const runtime = new Evaluator(executionEnvironment);
+        try {
+          runtime.evaluate(parse(tokenize(contract.code)));
+          // Ugh this is super hacky reconstructing the function call. Maybe we should just
+          // accept some source? Idk.
+          runtime.evaluate(
+            parse(
+              tokenize(
+                `(${message.func} ${message.args
+                  .map((x) => JSON.stringify(x))
+                  .join(" ")})`
+              )
+            )
+          );
+
+          // Save the final state
+          contract.storage = stateCopy;
+        } catch (e) {
+          console.log(e);
+        }
+      }
+    }
+
     return null;
   }
 

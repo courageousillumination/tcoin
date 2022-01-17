@@ -19,9 +19,9 @@ const startHttpServer = (
     new HttpClient(),
     new Blockchain()
   );
-  if (port === 3000) {
-    backend.setShouldMining(true);
-  }
+  // if (port === 3000) {
+  //   backend.setShouldMining(true);
+  // }
   const app = express();
   app.use(bodyParser.json());
   app.use(cors());

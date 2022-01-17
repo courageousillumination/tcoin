@@ -2,12 +2,14 @@ import {
   TCoinMessage,
   getBlocksMessage,
   BlocksMessage,
+  deploySmartContractMessage,
+  callSmartContractMessage,
 } from "../protocol/messages";
 import { Client } from "../client/client";
 import { TCoinServer } from "../server/server";
 import { ClientContext } from "./contexts/clientContext";
 import { useLoadNetworkData, Network } from "./hooks/network";
-import { useContext, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { Blockchain } from "../blockchain/blockchain";
 import { useMessage } from "./hooks/useMessage";
 import { Block, hashBlock } from "../blockchain/block";
@@ -145,6 +147,47 @@ class MockBlockchain extends Blockchain {
 const SANDBOX = new Sandbox();
 SANDBOX.addNode();
 
+const CONTRACT = `
+(begin
+  (define register-name 
+    (lambda (key value) 
+      (if (has-storage key)
+        0
+        (set-storage! key value)))))
+`;
+
+const SmartContractTest: React.FC = () => {
+  const { client } = useContext(ClientContext);
+  useEffect(() => {
+    const func = async () => {
+      await client.sendMessage(
+        "http://localhost:3000",
+        deploySmartContractMessage(CONTRACT)
+      );
+
+      await client.sendMessage(
+        "http://localhost:3000",
+        callSmartContractMessage(
+          "52898df6b79f85e165bef679835988e51e861380a1d376776b587ca32746bda3",
+          "register-name",
+          ["tristan", 42]
+        )
+      );
+
+      await client.sendMessage(
+        "http://localhost:3000",
+        callSmartContractMessage(
+          "52898df6b79f85e165bef679835988e51e861380a1d376776b587ca32746bda3",
+          "register-name",
+          ["tristan", "hacked"]
+        )
+      );
+    };
+    func();
+  }, [client]);
+  return <div>Smart contract testing</div>;
+};
+
 const App = () => {
   // return (
   //   <ClientContext.Provider value={{ client: SANDBOX.getClient() }}>
@@ -155,7 +198,7 @@ const App = () => {
   //   </ClientContext.Provider>
   // );
 
-  return <Wallet />;
+  return <SmartContractTest />;
 };
 
 export { App };
