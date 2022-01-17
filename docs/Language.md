@@ -25,9 +25,9 @@ a fuction to query it. And I need a function to set a value.
 So the entire smart contract may look something like this:
 
 `
-(set! register-value (lambda (key value) (setStorage! key value)))
+(define register-value (lambda (key value) (setStorage! key value)))
 
-(set! get-value (lambda (key) (getStorage key)))
+(define get-value (lambda (key) (getStorage key)))
 `
 
 Then we could interact with this either via directly inspecting the blockchain, or via

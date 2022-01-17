@@ -16,8 +16,30 @@ describe("tokenize", () => {
     ]);
   });
 
+  describe("handles numbers", () => {
+    it("handles integers", () => {
+      expect(tokenize("100")).toEqual([
+        { type: TokenType.Number, text: "100", object: 100 },
+        { type: TokenType.EndOfFile, text: "" },
+      ]);
+    });
+
+    it("handles floats", () => {
+      expect(tokenize("1.5")).toEqual([
+        { type: TokenType.Number, text: "1.5", object: 1.5 },
+        { type: TokenType.EndOfFile, text: "" },
+      ]);
+    });
+  });
+
   it("handles comments", () => {
-    expect(tokenize("() # None of this comes through")).toEqual([
+    expect(
+      tokenize(`
+      () ; None of this comes through
+      ()`)
+    ).toEqual([
+      { type: TokenType.LeftParen, text: "(" },
+      { type: TokenType.RightParen, text: ")" },
       { type: TokenType.LeftParen, text: "(" },
       { type: TokenType.RightParen, text: ")" },
       { type: TokenType.EndOfFile, text: "" },

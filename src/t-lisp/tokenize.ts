@@ -3,6 +3,7 @@ enum TokenType {
   LeftParen,
   RightParen,
   String,
+  Number,
   Identifier,
 }
 interface Token {
@@ -44,9 +45,9 @@ class Tokenizer {
         return this.addToken(TokenType.LeftParen);
       case ")":
         return this.addToken(TokenType.RightParen);
-      case "#":
+      case ";":
         // Handle comments by just consuming everything until end of line.
-        while (!this.isAtEnd() && this.peek()) {
+        while (!this.isAtEnd() && this.peek() !== "\n") {
           this.advance();
         }
         return;
@@ -57,6 +58,10 @@ class Tokenizer {
       case '"':
         return this.string();
       default:
+        if (this.isDigit(char)) {
+          return this.number();
+        }
+
         if (this.isAlpha(char)) {
           return this.identifier();
         }
@@ -71,11 +76,39 @@ class Tokenizer {
     this.addToken(TokenType.Identifier);
   }
 
+  private isDigit(char: string) {
+    return char.match(/[0-9]/);
+  }
+
   private isAlpha(char: string) {
     return char.match(/[a-z]/i);
   }
   private isIdentifierCharacter(char: string) {
-    return this.isAlpha(char) || char.match(/[!_0-9]/);
+    return (
+      this.isAlpha(char) ||
+      this.isDigit(char) ||
+      char === "!" ||
+      char === "_" ||
+      char === "-"
+    );
+  }
+
+  private number() {
+    while (this.isDigit(this.peek())) {
+      this.advance();
+    }
+
+    if (this.peek() === ".") {
+      this.advance();
+      while (this.isDigit(this.peek())) {
+        this.advance();
+      }
+    }
+
+    return this.addToken(
+      TokenType.Number,
+      parseFloat(this.source.slice(this.tokenStart, this.position))
+    );
   }
 
   private string() {
