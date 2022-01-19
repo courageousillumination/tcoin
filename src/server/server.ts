@@ -1,5 +1,9 @@
 import { Blockchain } from "../blockchain/blockchain";
-import { hashSmartContract, SmartContract } from "../blockchain/smartContract";
+import {
+  callSmartContract,
+  hashSmartContract,
+  SmartContract,
+} from "../blockchain/smartContract";
 import {
   createCoinbaseTransaction,
   Transaction,
@@ -25,9 +29,6 @@ import {
   DeploySmartContractMessage,
   CallSmartContractMessage,
 } from "../protocol/messages";
-import { Evaluator, ExecutionEnvironment } from "../t-lisp/evaluate";
-import { parse } from "../t-lisp/parse";
-import { tokenize } from "../t-lisp/tokenize";
 
 class TCoinServer {
   /** Current server version. Should only be incremented when the protocol changes. */
@@ -141,37 +142,12 @@ class TCoinServer {
   private handleCallSmartContract(message: CallSmartContractMessage) {
     for (const contract of this.contracts) {
       if (contract.id === message.id) {
-        const stateCopy = { ...contract.storage };
-        const executionEnvironment: ExecutionEnvironment = {
-          getStorage: (key) => stateCopy[key],
-          setStorage: (key, value) => {
-            stateCopy[key] = value;
-          },
-        };
-
-        const runtime = new Evaluator(executionEnvironment);
-        try {
-          runtime.evaluate(parse(tokenize(contract.code)));
-          // Ugh this is super hacky reconstructing the function call. Maybe we should just
-          // accept some source? Idk.
-          runtime.evaluate(
-            parse(
-              tokenize(
-                `(${message.func} ${message.args
-                  .map((x) => JSON.stringify(x))
-                  .join(" ")})`
-              )
-            )
-          );
-
-          // Save the final state
-          contract.storage = stateCopy;
-        } catch (e) {
-          console.log(e);
+        const result = callSmartContract(contract, message.func, message.args);
+        if (result) {
+          contract.storage = result?.storage;
         }
       }
     }
-
     return null;
   }
 
@@ -268,10 +244,10 @@ class TCoinServer {
   private async mine() {
     while (this.shouldMine) {
       const coinbase = createCoinbaseTransaction(this.keyPair.pub, 1);
-      const block = await this.blockchain.mineBlock([
-        coinbase,
-        ...this.mempool,
-      ]);
+      const block = await this.blockchain.mineBlock(
+        [coinbase, ...this.mempool],
+        this.contracts.slice()
+      );
       this.handleBlocks(blocksMessage([...this.blockchain.getBlocks(), block]));
     }
   }

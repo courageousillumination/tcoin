@@ -1,5 +1,6 @@
 import { Block, hashBlock } from "./block";
 import { findNonce, verifyHashcash } from "./hashcash";
+import { SmartContract } from "./smartContract";
 import { Transaction, verifyTransaction } from "./transaction";
 
 // TODO: Make this adjustable.
@@ -13,6 +14,7 @@ const GENESIS_BLOCK: Block = {
     difficulty: 3,
   },
   content: [],
+  contracts: [],
 };
 
 /**
@@ -65,7 +67,10 @@ class Blockchain {
   /**
    * Mines a new block, using the head of the blockchain.
    */
-  public async mineBlock(transactions: Transaction[]): Promise<Block> {
+  public async mineBlock(
+    transactions: Transaction[],
+    contracts: SmartContract[]
+  ): Promise<Block> {
     const headBlock = this.blocks[this.blocks.length - 1];
     const previousHash = hashBlock(headBlock);
     const buildNewBlock = (nonce: number) => ({
@@ -75,6 +80,7 @@ class Blockchain {
         difficulty: DIFFICULTY,
       },
       content: transactions,
+      contracts,
     });
     const nonce = await findNonce(
       (x) => hashBlock(buildNewBlock(x)),

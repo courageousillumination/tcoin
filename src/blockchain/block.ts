@@ -1,4 +1,5 @@
 import { hash } from "../common/crypto";
+import { SmartContract } from "./smartContract";
 import { Transaction } from "./transaction";
 
 /**
@@ -24,6 +25,9 @@ interface Block {
 
   /** Content of the block is going to be a series of transactions. */
   content: Transaction[];
+
+  /** Smart contracts attached to this block. */
+  contracts: SmartContract[];
 }
 
 /**
@@ -38,7 +42,8 @@ const hashBlock = (block: Block) => {
       // NOTE: This is going to add a bunch of extra JSON. Bitcoin
       // encodes as a merkle tree and only computes the hash once. We'll
       // look into this for future iterations.
-      JSON.stringify(block.content)
+      JSON.stringify(block.content) +
+      JSON.stringify(block.contracts)
   );
 };
 

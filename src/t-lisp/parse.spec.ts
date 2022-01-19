@@ -11,7 +11,7 @@ describe("parse", () => {
 
   it("parses a application", () => {
     expect(parse(tokenize("(foo bar)"))).toEqual({
-      type: ExpressionType.Apply,
+      type: ExpressionType.Proc,
       args: [
         { type: ExpressionType.Identifier, name: "foo" },
         { type: ExpressionType.Identifier, name: "bar" },
@@ -28,6 +28,14 @@ describe("parse", () => {
     expect(parse(tokenize('"foo"'))).toEqual({
       type: ExpressionType.Literal,
       value: "foo",
+    });
+  });
+
+  it("handles lambdas", () => {
+    expect(parse(tokenize("(lambda (a) a)"))).toEqual({
+      type: ExpressionType.Lambda,
+      symbols: [{ type: ExpressionType.Identifier, name: "a" }],
+      expr: { type: ExpressionType.Identifier, name: "a" },
     });
   });
 

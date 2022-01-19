@@ -39,22 +39,21 @@ class Evaluator {
     executionEnvironment?: ExecutionEnvironment,
     private readonly maxSteps = Infinity
   ) {
+    this.registerBuiltin("eq", (a: unknown, b: unknown) => a === b);
+    this.registerBuiltin(
+      "begin",
+      (...args: unknown[]) => args[args.length - 1]
+    );
+    // Custom built-ins to support the smart contract interaction.
     if (executionEnvironment) {
-      this.registerBuiltin(
-        "set-storage!",
-        (key: Expression, value: Expression) =>
-          executionEnvironment.setStorage(
-            this.evaluate(key),
-            this.evaluate(value)
-          )
+      this.registerBuiltin("set-storage!", (key: string, value: any) =>
+        executionEnvironment.setStorage(key, value)
       );
-      this.registerBuiltin("get-storage", (key: Expression) =>
-        executionEnvironment.getStorage(this.evaluate(key))
+      this.registerBuiltin("get-storage", (key: string) =>
+        executionEnvironment.getStorage(key)
       );
-      this.registerBuiltin("has-storage", (key: Expression) => {
-        return (
-          executionEnvironment.getStorage(this.evaluate(key)) !== undefined
-        );
+      this.registerBuiltin("has-storage", (key: string) => {
+        return executionEnvironment.getStorage(key) !== undefined;
       });
     }
   }
@@ -65,9 +64,37 @@ class Evaluator {
       throw new Error("Used up all of my gas");
     }
     switch (expr.type) {
-      case ExpressionType.Apply:
+      case ExpressionType.Proc:
         const proc = this.evaluate(expr.args[0]);
-        return proc.apply(undefined, expr.args.slice(1));
+        return proc.apply(
+          undefined,
+          expr.args.slice(1).map((exp) => this.evaluate(exp))
+        );
+      case ExpressionType.Lambda:
+        // Create a new lambda (with proper environment handling
+        // and local variable injection).
+        return (...args: Expression[]) => {
+          const environment = new Environment(this.environment);
+          this.environment = environment;
+          for (let i = 0; i < expr.symbols.length; i++) {
+            this.environment.set(expr.symbols[i].name, args[i]);
+          }
+          // Actually run the function
+          const result = this.evaluate(expr.expr);
+          // Restore the parent environment
+          this.environment = this.environment.parent as Environment;
+          return result;
+        };
+      case ExpressionType.If:
+        if (this.evaluate(expr.cond)) {
+          return this.evaluate(expr.then);
+        } else {
+          return this.evaluate(expr.otherwise);
+        }
+      case ExpressionType.Define:
+        const value = this.evaluate(expr.value);
+        this.environment.set(expr.symbol, value);
+        return value;
       case ExpressionType.Identifier:
         return this.getIdentifierValue(expr.name);
       case ExpressionType.Literal:
@@ -75,71 +102,12 @@ class Evaluator {
     }
   }
 
-  public getIdentifierValue = (
-    name: string
-  ): ((...args: Expression[]) => any) => {
-    if (name === "if") {
-      return (cond: Expression, a: Expression, b: Expression) => {
-        if (this.evaluate(cond)) {
-          return this.evaluate(a);
-        } else {
-          return this.evaluate(b);
-        }
-      };
-    } else if (name === "eq") {
-      return (a: Expression, b: Expression) => {
-        return this.evaluate(a) === this.evaluate(b);
-      };
-    } else if (name === "begin") {
-      return (...args: Expression[]) => {
-        let result = null;
-        for (const arg of args) {
-          result = this.evaluate(arg);
-        }
-        return result;
-      };
-    } else if (name === "define") {
-      return (symbol: Expression, value: Expression) => {
-        if (symbol.type !== ExpressionType.Identifier) {
-          throw new Error("define expects an identifier");
-        }
-        this.environment.set(symbol.name, this.evaluate(value));
-      };
-    } else if (name === "lambda") {
-      return (symbols: Expression, expr: Expression) => {
-        // The symbols may be wrapped in an Apply (since the parser is a bit dump and lambda is a special form)
-        // TODO: Move lambda handling over to the parser? Also maybe other special forms like if?
-        let unwrapedSymbols: IdentifierExpression[] = [];
-        if (symbols.type === ExpressionType.Apply) {
-          // TODO: Verify this...
-          unwrapedSymbols = symbols.args as IdentifierExpression[];
-        } else if (symbols.type === ExpressionType.Identifier) {
-          unwrapedSymbols = [symbols];
-        }
-
-        // Now we need to inject those into the environment...
-        return (...args: Expression[]) => {
-          const environment = new Environment(this.environment);
-          this.environment = environment;
-          for (let i = 0; i < unwrapedSymbols.length; i++) {
-            const value = evaluate(args[i]);
-            this.environment.set(unwrapedSymbols[i].name, value);
-          }
-
-          // Actually run the function
-          const result = this.evaluate(expr);
-          // Restore the parent environment
-          this.environment = this.environment.parent as Environment;
-          return result;
-        };
-      };
-    } else {
-      const value = this.environment.get(name);
-      if (value) {
-        return value;
-      }
-      throw new Error(`Unknown symbol ${name}`);
+  public getIdentifierValue = (name: string): any => {
+    const value = this.environment.get(name);
+    if (value) {
+      return value;
     }
+    throw new Error(`Unknown symbol ${name}`);
   };
 
   private registerBuiltin(key: string, value: any) {
