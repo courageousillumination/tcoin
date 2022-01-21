@@ -1,13 +1,31 @@
-import { useContext, useMemo, useState } from "react";
+// import { useContext, useMemo, useState } from "react";
+// import { Block } from "../../blockchain/block";
+// import {
+//   getSignableTransaction,
+//   hashTransaction,
+//   Transaction,
+//   TransactionInput,
+//   TransactionOutput,
+// } from "../../blockchain/transaction";
+// import { derivePublicKey, sign } from "../../common/crypto";
+// import {
+//   BlocksMessage,
+//   getBlocksMessage,
+//   transactionsMessage,
+// } from "../../protocol/messages";
+// import { ClientContext } from "../contexts/clientContext";
+// import { useMessage } from "../hooks/useMessage";
+
+import { useContext, useEffect, useMemo, useState } from "react";
 import { Block } from "../../blockchain/block";
 import {
+  BitcoinTransaction,
   getSignableTransaction,
   hashTransaction,
-  Transaction,
   TransactionInput,
   TransactionOutput,
-} from "../../blockchain/transaction";
-import { derivePublicKey, sign } from "../../common/crypto";
+} from "../../blockchain/transaction/bitcoinTransaction";
+import { createKeyPair, derivePublicKey, sign } from "../../common/crypto";
 import {
   BlocksMessage,
   getBlocksMessage,
@@ -16,8 +34,8 @@ import {
 import { ClientContext } from "../contexts/clientContext";
 import { useMessage } from "../hooks/useMessage";
 
-const getUtxo = (blocks: Block[], publicKey: string) => {
-  const utxo: Transaction[] = [];
+const getUtxo = (blocks: Block<BitcoinTransaction[]>[], publicKey: string) => {
+  const utxo: BitcoinTransaction[] = [];
   for (const block of blocks) {
     for (const transaction of block.content) {
       if (transaction.outputs.map((x) => x.publicKey).includes(publicKey)) {
@@ -25,6 +43,8 @@ const getUtxo = (blocks: Block[], publicKey: string) => {
       }
     }
   }
+
+  // TODO: Remove all spent
   return utxo;
 };
 /**
@@ -47,7 +67,7 @@ const calculateBalance = (blocks: Block[], publicKey: string) => {
 };
 
 const getInputs = (
-  utxo: Transaction[],
+  utxo: BitcoinTransaction[],
   publicKey: string,
   target: number
 ): [TransactionInput[], number] => {
@@ -98,7 +118,7 @@ const generateNewTransaction = async (
     });
   }
 
-  const transaction: Transaction = {
+  const transaction: BitcoinTransaction = {
     id: "",
     inputs,
     outputs,
@@ -170,9 +190,11 @@ const Wallet: React.FC = () => {
         value={privateKey}
         onChange={(e) => setPrivateKey(e.target.value)}
       />
+      <button onClick={() => console.log(createKeyPair())}>Generate new</button>
       {privateKey && blocks ? (
         <WalletInternal privateKey={privateKey} blocks={blocks} />
       ) : null}
+      <pre>{JSON.stringify(blocks, undefined, 4)}</pre>
     </div>
   );
 };

@@ -2,6 +2,7 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import express from "express";
 import { Blockchain } from "../blockchain/blockchain";
+import { BitcoinTransactionManager } from "../blockchain/transaction/bitcoinTransaction";
 
 import { HttpClient } from "../client/httpClient";
 
@@ -14,14 +15,14 @@ const startHttpServer = (
   host: string = "http://localhost",
   port: number = 3000
 ) => {
-  const backend = new TCoinServer(
-    `${host}:${port}`,
-    new HttpClient(),
-    new Blockchain()
-  );
-  // if (port === 3000) {
-  //   backend.setShouldMining(true);
-  // }
+  const transactionManager = new BitcoinTransactionManager();
+  const blockchain = new Blockchain(transactionManager);
+  const client = new HttpClient();
+  const backend = new TCoinServer(`${host}:${port}`, client, blockchain);
+
+  if (port === 3000) {
+    backend.setShouldMining(true);
+  }
   const app = express();
   app.use(bodyParser.json());
   app.use(cors());

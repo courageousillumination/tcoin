@@ -1,16 +1,5 @@
 import { Blockchain } from "../blockchain/blockchain";
-import {
-  callSmartContract,
-  hashSmartContract,
-  SmartContract,
-} from "../blockchain/smartContract";
-import {
-  createCoinbaseTransaction,
-  Transaction,
-  verifyTransaction,
-} from "../blockchain/transaction";
 import { Client } from "../client/client";
-import { createKeyPair } from "../common/crypto";
 import {
   TCoinMessage,
   PeersMessage,
@@ -26,8 +15,6 @@ import {
   blocksMessage,
   TransactionsMessage,
   transactionsMessage,
-  DeploySmartContractMessage,
-  CallSmartContractMessage,
 } from "../protocol/messages";
 
 class TCoinServer {
@@ -44,23 +31,16 @@ class TCoinServer {
   /** Controls whether the node should be mining. */
   private shouldMine = false;
 
-  /** Keys used by this server for mining. */
-  private readonly keyPair = createKeyPair();
-
-  /** A set of transactions that have not yet been committed. */
-  private mempool: Transaction[] = [];
-
-  // Do the smart contracts locally, we'll haul them off to the block chain later.
-  private contracts: SmartContract[] = [];
-
   constructor(
     private readonly address: string,
     private readonly client: Client,
     private readonly blockchain: Blockchain
-  ) {
-    console.log(this.keyPair);
-  }
+  ) {}
 
+  /**
+   * Set whether the node should be mining.
+   * @param shouldMine
+   */
   public setShouldMining(shouldMine: boolean) {
     this.shouldMine = shouldMine;
     this.mine();
@@ -88,10 +68,6 @@ class TCoinServer {
         return this.handleGetBlocks(message);
       case "transactions":
         return this.handleTransactions(message);
-      case "deploySmartContract":
-        return this.handleDeploySmartContract(message);
-      case "callSmartContract":
-        return this.handleCallSmartContract(message);
       case "versionAck":
         // No response required.
         return null;
@@ -105,14 +81,8 @@ class TCoinServer {
    *
    * The new blocks will be merged into the existing blockchain if possible.
    */
-  private handleBlocks(message: BlocksMessage) {
-    if (this.blockchain.mergeBlocks(message.blocks)) {
-      // Update the mempool to only those that are not in the new blocks.
-      // TODO: Need to go through and update the mempool to revalidate transactions.
-      this.mempool = this.mempool.filter(
-        (x) => this.blockchain.getTransaction(x.id) === null
-      );
-
+  private async handleBlocks(message: BlocksMessage) {
+    if (await this.blockchain.mergeBlocks(message.blocks)) {
       // We sucessfully merged this in, let everyone else know.
       this.client.broadcast(
         this.peers,
@@ -122,64 +92,23 @@ class TCoinServer {
     return null;
   }
 
-  private handleDeploySmartContract(message: DeploySmartContractMessage) {
-    const contract: SmartContract = {
-      id: "",
-      code: message.code,
-      storage: {},
-    };
-    contract.id = hashSmartContract(contract);
-    for (const c of this.contracts) {
-      if (c.id === contract.id) {
-        // we've already deployed this exact contract.
-        return null;
-      }
-    }
-    this.contracts.push(contract);
-    return null;
-  }
-
-  private handleCallSmartContract(message: CallSmartContractMessage) {
-    for (const contract of this.contracts) {
-      if (contract.id === message.id) {
-        const result = callSmartContract(contract, message.func, message.args);
-        if (result) {
-          contract.storage = result?.storage;
-        }
-      }
-    }
-    return null;
-  }
-
   /**
    * Handles a transactions message. If the transactions are valid they are added
    * to the mempool for future commits.
    * @param message
    */
-  private handleTransactions(message: TransactionsMessage) {
+  private async handleTransactions(message: TransactionsMessage) {
+    const accepted = [];
     for (const transaction of message.transactions) {
-      if (this.mempool.find((x) => x.id === transaction.id)) {
-        // We already know about this transaction, carry on.
-        continue;
+      if (await this.blockchain.addTransaction(transaction)) {
+        accepted.push(transaction);
       }
-      this.verifyTransaction(transaction);
+    }
+    // Let everyone else know about the new transactions that we've accepted.
+    if (accepted.length) {
+      this.client.broadcast(this.peers, transactionsMessage(accepted));
     }
     return null;
-  }
-
-  /**
-   * Verify that a transaction is valid. If so, add it to the mempool.
-   * @param transaction
-   */
-  private async verifyTransaction(transaction: Transaction) {
-    const verified = await verifyTransaction(
-      transaction,
-      this.blockchain.getTransactionAsync.bind(this.blockchain)
-    );
-    if (verified) {
-      this.mempool.push(transaction);
-      this.client.broadcast(this.peers, transactionsMessage([transaction]));
-    }
   }
 
   /** Handle a get blocks message and returns all known blocks. */
@@ -243,12 +172,10 @@ class TCoinServer {
    */
   private async mine() {
     while (this.shouldMine) {
-      const coinbase = createCoinbaseTransaction(this.keyPair.pub, 1);
-      const block = await this.blockchain.mineBlock(
-        [coinbase, ...this.mempool],
-        this.contracts.slice()
+      const block = await this.blockchain.mineBlock();
+      await this.handleBlocks(
+        blocksMessage([...this.blockchain.getBlocks(), block])
       );
-      this.handleBlocks(blocksMessage([...this.blockchain.getBlocks(), block]));
     }
   }
 }

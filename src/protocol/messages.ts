@@ -1,5 +1,7 @@
 import { Block } from "../blockchain/block";
-import { Transaction } from "../blockchain/transaction";
+import { BitcoinTransaction } from "../blockchain/transaction/bitcoinTransaction";
+
+type Transaction = BitcoinTransaction;
 
 /**
  * A peers message notifies another node about the current version.
@@ -80,6 +82,7 @@ interface GetBlocksMessage {
  */
 interface TransactionsMessage {
   type: "transactions";
+  // TODO: Make this generic somehow.
   transactions: Transaction[];
 }
 

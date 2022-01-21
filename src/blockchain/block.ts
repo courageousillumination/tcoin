@@ -1,50 +1,47 @@
 import { hash } from "../common/crypto";
-import { SmartContract } from "./smartContract";
-import { Transaction } from "./transaction";
 
 /**
- * Block header includes metadata about a block.
+ * A block for a proof-of-work blockchain.
  */
-interface BlockHeader {
-  /** Hash of the previosu block in the chain. */
+interface Block<T = any> {
+  /** Unique ID for this block (generated via hash). */
+  id: string;
+
+  /** Hash of the previous block in the blockchain. */
   previousHash: string;
 
-  /** Nonce used as part of proof of work. */
+  /** Nonce for generating a correct hash. */
   nonce: number;
 
-  /** Difficulty of this block. */
+  /** Target difficulty for this block. */
   difficulty: number;
-}
 
-/**
- * A single block in the block chain.
- */
-interface Block {
-  /** Header information for the block. */
-  header: BlockHeader;
-
-  /** Content of the block is going to be a series of transactions. */
-  content: Transaction[];
-
-  /** Smart contracts attached to this block. */
-  contracts: SmartContract[];
+  /** Content of the block. */
+  content: T;
 }
 
 /**
  * Produces a hash of a block.
  * @param block
  */
-const hashBlock = (block: Block) => {
+const hashBlock = (block: Omit<Block<unknown>, "id">) => {
   return hash(
-    block.header.previousHash +
-      block.header.nonce.toString() +
-      block.header.difficulty.toString() +
-      // NOTE: This is going to add a bunch of extra JSON. Bitcoin
-      // encodes as a merkle tree and only computes the hash once. We'll
-      // look into this for future iterations.
-      JSON.stringify(block.content) +
-      JSON.stringify(block.contracts)
+    block.previousHash +
+      block.nonce.toString() +
+      block.difficulty.toString() +
+      // NOTE: We may want to revist and only hash the merkle tree
+      // roots (if we ever get around to that).
+      JSON.stringify(block.content)
   );
 };
 
-export { hashBlock, Block, BlockHeader };
+/**
+ * Creates a block with the correct ID.
+ * @param block
+ * @returns
+ */
+const idBlock = (block: Omit<Block<unknown>, "id">) => {
+  return { ...block, id: hashBlock(block) };
+};
+
+export { hashBlock, Block, idBlock };

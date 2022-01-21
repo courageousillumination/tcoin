@@ -8,11 +8,11 @@ const Block: React.FC<{ block: TBlock }> = ({ block }) => {
         <tbody>
           <tr>
             <td>Previous Hash</td>
-            <td>{block.header.previousHash} </td>
+            <td>{block.previousHash} </td>
           </tr>
           <tr>
             <td>Nonce</td>
-            <td>{block.header.previousHash} </td>
+            <td>{block.previousHash} </td>
           </tr>
         </tbody>
       </table>
