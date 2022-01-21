@@ -159,8 +159,6 @@ class BitcoinTransactionManager
       }
     }
 
-    console.log("down here");
-
     // Now see if we can find it.
     for (const transaction of this.allTransactions) {
       if (transaction.id === id) {
@@ -176,7 +174,6 @@ class BitcoinTransactionManager
    * @returns
    */
   private async verifyTransaction(transaction: BitcoinTransaction) {
-    console.log(transaction);
     const outputs: TransactionOutput[] = [];
     for (const input of transaction.inputs) {
       const output = this.getUtxo(

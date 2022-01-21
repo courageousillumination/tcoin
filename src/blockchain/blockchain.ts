@@ -84,7 +84,7 @@ class Blockchain<T = unknown> {
    */
   public async mineBlock(hashrate = 1): Promise<Block<unknown>> {
     const previousHash = this.getHead().id;
-    const content = [...this.transactionManager.getDataToCommit()];
+    const content = this.transactionManager.getDataToCommit();
     const buildNewBlock = (nonce: number) => ({
       previousHash,
       content,
@@ -147,6 +147,7 @@ class Blockchain<T = unknown> {
     const newTransactionManager = this.transactionManager.clone();
     for (let i = 1; i < blocks.length; i++) {
       const block = blocks[i];
+      console.log(blocks);
       if (hashBlock(block) !== block.id) {
         console.warn("Invalid block hash.");
         return null;

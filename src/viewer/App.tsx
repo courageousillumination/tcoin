@@ -15,6 +15,7 @@ import { Blockchain } from "../blockchain/blockchain";
 import { useMessage } from "./hooks/useMessage";
 import { Block, hashBlock } from "../blockchain/block";
 import { Wallet } from "./components/Wallet";
+import { ContractEditor } from "./components/ContractEditor";
 // import { Wallet } from "./components/Wallet";
 // import { Transaction } from "../blockchain/transaction";
 
@@ -216,7 +217,8 @@ const App = () => {
   // );
   // return <RealApp />;
 
-  return <Wallet />;
+  // return <Wallet />;
+  return <ContractEditor />;
   // return <SmartContractTest />;
 };
 

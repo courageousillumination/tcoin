@@ -1,7 +1,8 @@
 import { Block } from "../blockchain/block";
 import { BitcoinTransaction } from "../blockchain/transaction/bitcoinTransaction";
+import { EthereumTransaction } from "../blockchain/transaction/ethereumTransaction";
 
-type Transaction = BitcoinTransaction;
+type Transaction = BitcoinTransaction | EthereumTransaction;
 
 /**
  * A peers message notifies another node about the current version.

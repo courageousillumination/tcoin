@@ -3,6 +3,7 @@ import cors from "cors";
 import express from "express";
 import { Blockchain } from "../blockchain/blockchain";
 import { BitcoinTransactionManager } from "../blockchain/transaction/bitcoinTransaction";
+import { EthereumTransactionManager } from "../blockchain/transaction/ethereumTransaction";
 
 import { HttpClient } from "../client/httpClient";
 
@@ -15,7 +16,7 @@ const startHttpServer = (
   host: string = "http://localhost",
   port: number = 3000
 ) => {
-  const transactionManager = new BitcoinTransactionManager();
+  const transactionManager = new EthereumTransactionManager();
   const blockchain = new Blockchain(transactionManager);
   const client = new HttpClient();
   const backend = new TCoinServer(`${host}:${port}`, client, blockchain);
