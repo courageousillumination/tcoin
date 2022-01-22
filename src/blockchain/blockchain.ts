@@ -28,7 +28,7 @@ class Blockchain<T = unknown> {
         nonce: 0,
         previousHash: "",
         difficulty: 1,
-        content: this.transactionManager.getPending(),
+        content: [],
       }) as any
     );
   }
@@ -63,15 +63,41 @@ class Blockchain<T = unknown> {
       return false;
     }
 
-    const newManager = await this.validateBlocks(blocks);
-    if (newManager === null) {
-      console.warn("Attempted to merge in an invalid chain.");
+    if (!(await this.validateBlocks(blocks))) {
       return false;
     }
-    // Make sure we don't drop the mempool
-    // TODO: There needs to be a better way of handling this...
-    newManager.applyToCommit(this.transactionManager.getPending());
-    this.transactionManager = newManager;
+
+    // Everything is valid, so now we try to actually apply these transactions.
+    // Roughly we do the following:
+    //   1) Find all of the blocks in our current chain that are no longer valid
+    //   2) Rollback each of these blocks (in reverse order).
+    //   3) Find all blocks in the new chain
+    //   4) Apply each of these blocks
+    // If any of these steps fail, the original state is restored and we return false.
+
+    // Find the first block with a different ID.
+    let forkIndex;
+    for (forkIndex = 0; forkIndex < blocks.length; forkIndex++) {
+      if (this.blocks[forkIndex]?.id !== blocks[forkIndex].id) {
+        break;
+      }
+    }
+
+    const rollbackBlocks = this.blocks.slice(forkIndex);
+    const applyBlocks = blocks.slice(forkIndex);
+    rollbackBlocks.reverse(); // Reverse so we apply the rollbacks in the right order.
+
+    for (const block of rollbackBlocks) {
+      await this.transactionManager.rollback(block.content);
+    }
+
+    for (const block of applyBlocks) {
+      if (!(await this.transactionManager.apply(block.content))) {
+        // TODO: Put the transaction manager back in a good place.
+        return false;
+      }
+    }
+
     this.blocks = blocks;
     return true;
   }
@@ -84,7 +110,7 @@ class Blockchain<T = unknown> {
    */
   public async mineBlock(hashrate = 1): Promise<Block<unknown>> {
     const previousHash = this.getHead().id;
-    const content = this.transactionManager.getDataToCommit();
+    const content = await this.transactionManager.getCommit();
     const buildNewBlock = (nonce: number) => ({
       previousHash,
       content,
@@ -136,37 +162,28 @@ class Blockchain<T = unknown> {
   /**
    * Validates that a series of blocks forms a valid blockchain.
    *
-   * NOTE: This assumes that the genesis block is valid.
-   * WARNING: This will update the transaction manager
+   * This does not validate transactions, just that the block headers
+   * are correct.
    * @param blocks
    * @returns
    */
-  private async validateBlocks(
-    blocks: Block<T>[]
-  ): Promise<TransactionManager | null> {
-    const newTransactionManager = this.transactionManager.clone();
+  private async validateBlocks(blocks: Block<T>[]): Promise<boolean> {
     for (let i = 1; i < blocks.length; i++) {
       const block = blocks[i];
-      console.log(blocks);
       if (hashBlock(block) !== block.id) {
         console.warn("Invalid block hash.");
-        return null;
+        return false;
       }
       if (block.previousHash !== blocks[i - 1].id) {
         console.warn("Invalid previous hash");
-        return null;
+        return false;
       }
       if (!verifyHashcash(block.id, block.difficulty)) {
         console.warn("Block does not match difficulty");
-        return null;
-      }
-
-      if (!(await newTransactionManager.applyComitted(block.content))) {
-        console.warn("Transaction validation failed");
-        return null;
+        return false;
       }
     }
-    return newTransactionManager;
+    return true;
   }
 }
 

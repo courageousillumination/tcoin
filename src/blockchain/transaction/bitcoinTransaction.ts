@@ -65,13 +65,27 @@ const getSignableTransaction = (transaction: BitcoinTransaction): string => {
  * @param transaction
  * @returns
  */
-const hashTransaction = (transaction: BitcoinTransaction) => {
+const hashTransaction = (transaction: Omit<BitcoinTransaction, "id">) => {
   return hash(
     JSON.stringify({
       inputs: transaction.inputs,
       outputs: transaction.outputs,
     })
   );
+};
+
+/**
+ * Creates a transaction with the correct id.
+ * @param transaction
+ * @returns
+ */
+const idTransaction = (
+  transaction: Omit<BitcoinTransaction, "id">
+): BitcoinTransaction => {
+  return {
+    ...transaction,
+    id: hashTransaction(transaction),
+  };
 };
 
 class BitcoinTransactionManager
@@ -81,106 +95,111 @@ class BitcoinTransactionManager
   private mempool: BitcoinTransaction[] = [];
 
   /**
-   * All transactions (maybe make this just the UTXO?)
+   * All committed transactions that we know about.
    */
-  private allTransactions: BitcoinTransaction[] = [];
+  private committedTransactions: BitcoinTransaction[] = [];
+
+  constructor(private readonly getPublicKey: () => string) {}
 
   /** @override */
-  async addTransaction(transaction: BitcoinTransaction) {
-    // Make sure the transaction is valid.
-    if (!(await this.verifyTransaction(transaction))) {
+  public async addTransaction(transaction: BitcoinTransaction) {
+    if (!(await this.validateTransaction(transaction))) {
       return false;
     }
 
-    // Make sure we don't already know about this transaction.
     if (this.mempool.find((x) => x.id === transaction.id)) {
       return false;
     }
 
     this.mempool.push(transaction);
-    this.allTransactions.push(transaction);
     return true;
   }
 
   /** @override */
-  getDataToCommit() {
-    return [this.createCoinbase(), ...this.mempool];
-  }
-
-  /** @override */
-  getPending() {
-    return [...this.mempool];
-  }
-
-  /** @override */
-  async applyComitted(data: BitcoinTransaction[]) {
-    // TODO: Check the coinbase transaction
-    this.allTransactions.push(data[0]);
+  public async apply(data: BitcoinTransaction[]) {
+    const coinbase = data[0];
+    if (!this.validateCoinbase(coinbase)) {
+      return false;
+    }
     for (const transaction of data.slice(1)) {
-      if (!(await this.verifyTransaction(transaction))) {
+      if (!(await this.validateTransaction(transaction))) {
         return false;
       }
-      this.allTransactions.push(transaction);
     }
+    this.committedTransactions = this.committedTransactions.concat(data);
     return true;
   }
 
   /** @override */
-  async applyToCommit(data: BitcoinTransaction[]) {
+  public async rollback(data: BitcoinTransaction[]) {
     for (const transaction of data) {
-      if (!this.allTransactions.find((x) => x.id === transaction.id)) {
-        // We haven't already committed, keep it in the mempool
-        this.mempool.push(transaction);
+      const old = this.committedTransactions.pop();
+      if (!old || old.id !== transaction.id) {
+        console.warn("Rollback incorrectly applied.");
       }
     }
-    return true;
   }
 
   /** @override */
-  public clone() {
-    return new BitcoinTransactionManager();
+  public async getCommit() {
+    await this.validateMempool();
+    return [this.getCoinbase(), ...this.mempool];
   }
 
   /**
-   * Find a a UTXO
-   * @param id
-   * @param index
+   * Gets the set of all UTXO.
+   * @returns
    */
-  private getUtxo(id: string, index: number): TransactionOutput | null {
-    // Make sure it hasn't been used already
-    for (const transaction of this.allTransactions) {
-      for (const input of transaction.inputs) {
-        if (
-          input.previousTransaction === id &&
-          input.previousTransactionIndex === index
-        ) {
-          return null;
-        }
+  public getUtxoSet(): Map<string, Map<number, TransactionOutput>> {
+    const finalSet = new Map<string, Map<number, TransactionOutput>>();
+    for (const transaction of this.committedTransactions) {
+      const outputs = new Map();
+      for (let i = 0; i < transaction.outputs.length; i++) {
+        outputs.set(i, transaction.outputs[i]);
       }
+      finalSet.set(transaction.id, outputs);
     }
 
-    // Now see if we can find it.
-    for (const transaction of this.allTransactions) {
-      if (transaction.id === id) {
-        return transaction.outputs[index];
+    // Clear out everything that's been spent.
+    for (const transaction of this.committedTransactions) {
+      for (const input of transaction.inputs) {
+        finalSet
+          .get(input.previousTransaction)
+          ?.delete(input.previousTransactionIndex);
       }
     }
-    return null;
+    return finalSet;
   }
 
   /**
-   * Verifies a transaction is valid.
+   * Validadte everything in the mempool.
+   *
+   * Discard transactions that are not valid.
+   */
+  private async validateMempool() {
+    const newPool = [];
+    for (const transaction of this.mempool) {
+      if (await this.validateTransaction(transaction)) {
+        newPool.push(transaction);
+      }
+    }
+    this.mempool = newPool;
+  }
+
+  /**
+   * Ensure that a transaction is valid.
    * @param transaction
    * @returns
    */
-  private async verifyTransaction(transaction: BitcoinTransaction) {
+  private async validateTransaction(transaction: BitcoinTransaction) {
+    const utxoSet = this.getUtxoSet();
+
     const outputs: TransactionOutput[] = [];
     for (const input of transaction.inputs) {
-      const output = this.getUtxo(
-        input.previousTransaction,
-        input.previousTransactionIndex
-      );
-      if (output === null) {
+      const output = utxoSet
+        .get(input.previousTransaction)
+        ?.get(input.previousTransactionIndex);
+      if (output === undefined) {
         return false;
       }
       outputs.push(output);
@@ -214,28 +233,27 @@ class BitcoinTransactionManager
     return true;
   }
 
-  //   priv: "9fa64a170b24c8a5196a17d2593b44bed508f4b227c71823fd5816d3ccee9cbe"
-  // pub: "04ed135fc903c97feda189d8cb7416dd87e8e19b0cec2705a969cbbd2fdbd0ad6cfc8fed7f0bd3ab20c5a82f53921cdbff3a6a16a4c8041e41925673250a7c9443"
   /**
-   * Create a coinbase transaction.
+   * Validates the coinbase transaction.
+   * @param transaction
    * @returns
    */
-  private createCoinbase(): BitcoinTransaction {
-    const transaction = {
-      id: "",
+  private validateCoinbase(transaction: BitcoinTransaction | undefined) {
+    if (!transaction) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Builds a coinbase transaction.
+   * @returns
+   */
+  private getCoinbase(): BitcoinTransaction {
+    return idTransaction({
       inputs: [],
-      outputs: [
-        {
-          amount: 1000,
-          publicKey:
-            "04ed135fc903c97feda189d8cb7416dd87e8e19b0cec2705a969cbbd2fdbd0ad6cfc8fed7f0bd3ab20c5a82f53921cdbff3a6a16a4c8041e41925673250a7c9443",
-        },
-      ],
-    };
-    return {
-      ...transaction,
-      id: hashTransaction(transaction),
-    };
+      outputs: [{ publicKey: this.getPublicKey(), amount: 1000 }],
+    });
   }
 }
 

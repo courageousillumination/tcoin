@@ -6,27 +6,22 @@ import { TransactionManager } from "./transactionManager";
  * Mainly used for testing.
  */
 class EmptyTransactionManager implements TransactionManager<never, null> {
+  /** @override */
   public async addTransaction(transaction: never) {
     return true;
   }
 
-  public getDataToCommit() {
-    return null;
-  }
-  public async applyComitted(data: null) {
+  /** @override */
+  public async apply(commit: null) {
     return true;
   }
 
-  public async applyToCommit(data: null) {
-    return true;
-  }
+  /** @override */
+  public async rollback(commit: null) {}
 
-  public getPending() {
+  /** @override */
+  public async getCommit() {
     return null;
-  }
-
-  public clone() {
-    return new EmptyTransactionManager();
   }
 }
 

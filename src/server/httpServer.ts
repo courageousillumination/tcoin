@@ -6,6 +6,7 @@ import { BitcoinTransactionManager } from "../blockchain/transaction/bitcoinTran
 import { EthereumTransactionManager } from "../blockchain/transaction/ethereumTransaction";
 
 import { HttpClient } from "../client/httpClient";
+import { createKeyPair } from "../common/crypto";
 
 import { TCoinServer } from "./server";
 
@@ -16,7 +17,10 @@ const startHttpServer = (
   host: string = "http://localhost",
   port: number = 3000
 ) => {
+  const keyPair = createKeyPair();
+  // const transactionManager = new BitcoinTransactionManager(() => keyPair.pub);
   const transactionManager = new EthereumTransactionManager();
+  console.log(keyPair);
   const blockchain = new Blockchain(transactionManager);
   const client = new HttpClient();
   const backend = new TCoinServer(`${host}:${port}`, client, blockchain);

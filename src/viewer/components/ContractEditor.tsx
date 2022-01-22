@@ -1,4 +1,5 @@
 import { useContext, useState } from "react";
+import { createTransaction } from "../../blockchain/transaction/ethereumTransaction";
 import {
   BlocksMessage,
   getBlocksMessage,
@@ -8,6 +9,8 @@ import { ClientContext } from "../contexts/clientContext";
 import { useMessage } from "../hooks/useMessage";
 
 const NODE = "http://localhost:3000";
+const PRIVATE_KEY =
+  "d28feb06cc38f414646e8c398ba081d4d41460477f748a43bacec59ed9ee206f";
 const GET_BLOCKS = getBlocksMessage();
 
 const DeployContract: React.FC = () => {
@@ -17,16 +20,18 @@ const DeployContract: React.FC = () => {
     <div>
       <textarea value={code} onChange={(e) => setCode(e.target.value)} />
       <button
-        onClick={() => {
+        onClick={async () => {
           client.sendMessage(
             NODE,
             transactionsMessage([
-              {
-                sender: "",
-                signature: "",
-                type: "deployContract",
-                code,
-              },
+              (await createTransaction(
+                {
+                  nonce: Math.random(),
+                  type: "deployContract",
+                  code,
+                },
+                PRIVATE_KEY
+              )) as any,
             ])
           );
         }}
@@ -54,18 +59,20 @@ const CallContract: React.FC = () => {
       <label>Args</label>
       <input value={args} onChange={(e) => setArgs(e.target.value)} />
       <button
-        onClick={() => {
+        onClick={async () => {
           client.sendMessage(
             NODE,
             transactionsMessage([
-              {
-                sender: "",
-                signature: "",
-                type: "callContract",
-                contract,
-                functionName,
-                args: JSON.parse(args),
-              },
+              (await createTransaction(
+                {
+                  type: "callContract",
+                  contract,
+                  functionName,
+                  args: JSON.parse(args),
+                  nonce: Math.random(),
+                },
+                PRIVATE_KEY
+              )) as any,
             ])
           );
         }}

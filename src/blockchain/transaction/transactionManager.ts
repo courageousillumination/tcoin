@@ -1,32 +1,38 @@
-interface TransactionManager<TTransaction = any, TData = any> {
+interface TransactionManager<TTransaction = any, TCommit = any> {
   /**
    * Adds a new transaction to the manager.
+   *
+   * This will be verified, but it will not be committed. Returns
+   * true if the transaction was accepted, and false otherwise.
+   *
+   * @param transaction
+   * @returns
    */
   addTransaction(transaction: TTransaction): Promise<boolean>;
 
   /**
-   * Get all data that should be committed to the chain.
+   * Rollsback a series of commits.
+   *
+   * These commits should have been applied to the transaction manager
+   * previously.
+   * @param commit
+   * @returns
    */
-  getDataToCommit(): TData;
-
-  /** Get all pending data. */
-  getPending(): TData;
-
-  /**
-   * Run a set of transactions (that have already been committed).
-   * @param data
-   */
-  applyComitted(data: TData): Promise<boolean>;
+  rollback(commit: TCommit): Promise<void>;
 
   /**
-   * Apply things that still need to be committed.
+   * Applies a commit to the transaction manager.
+   *
+   * @param commit
+   * @returns true if the commit applies sucessfully.
    */
-  applyToCommit(data: TData): Promise<boolean>;
+  apply(commit: TCommit): Promise<boolean>;
 
   /**
-   * Creates a clone of this transaction manager, but with an empty data.
+   * Gets the current data that should be committed.
+   * @returns
    */
-  clone(): TransactionManager<TTransaction, TData>;
+  getCommit(): Promise<TCommit>;
 }
 
 export { TransactionManager };
